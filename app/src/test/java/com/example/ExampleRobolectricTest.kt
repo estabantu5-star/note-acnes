@@ -66,9 +66,14 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `read app_name from strings xml`() {
+    fun `read app_name from strings xml and launch MainActivity cleanly`() {
         val appName = context.getString(R.string.app_name)
         assertEquals("SkinCare Daily", appName)
+
+        val controller = org.robolectric.Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = controller.get()
+        assertNotNull(activity)
+        controller.pause().stop().destroy()
     }
 
     @Test

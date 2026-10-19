@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -695,7 +696,7 @@ class SkinCareViewModel(
         val settings = preferencesRepository.getSettingsSnapshot()
         val isMorningDone = repository.isPeriodRoutineCompletedForDate(today, RoutinePeriod.MORNING)
         val isEveningDone = repository.isPeriodRoutineCompletedForDate(today, RoutinePeriod.EVENING)
-        val activeTasks = repository.allTasksFlow.stateIn(viewModelScope).value.filter { it.isActive }
+        val activeTasks = repository.activeTasksFlow.first()
         reminderScheduler.syncAllReminders(
             settings = settings,
             activeTasks = activeTasks,

@@ -2,8 +2,10 @@ package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,15 +18,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Bedtime
+import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Insights
+import androidx.compose.material.icons.outlined.MedicalServices
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -33,154 +38,197 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.domain.RoutineScheduleHelper
 import com.example.ui.HistoryDayRecordUi
 import com.example.ui.SkinCareUiState
 import com.example.ui.WeeklyHistorySummaryUi
+import com.example.ui.components.LiquidGlassPill
+import com.example.ui.components.LiquidGlassSurface
+import com.example.ui.components.LiquidSegmentedBar
+import com.example.ui.theme.LiquidGlassTokens
 
 @Composable
 fun HistoryScreen(
     uiState: SkinCareUiState,
     modifier: Modifier = Modifier
 ) {
+    val glass = LiquidGlassTokens.colors
+    var expandedDates by rememberSaveable { mutableStateOf(setOf<String>()) }
+    var selectedFilterIndex by rememberSaveable { mutableIntStateOf(0) } // 0 = 7 Hari, 1 = 30 Hari, 2 = Semua
+
+    val filteredRecords = when (selectedFilterIndex) {
+        0 -> uiState.historyRecords.take(7)
+        1 -> uiState.historyRecords.take(30)
+        else -> uiState.historyRecords
+    }
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
             .testTag("history_screen_list"),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 112.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        item(key = "history_header") {
-            Column {
+        item(key = "header") {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "Riwayat Kepatuhan Skincare",
+                    text = "Riwayat Kepatuhan",
                     style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onBackground
+                    fontWeight = FontWeight.ExtraBold,
+                    color = glass.textPrimary
                 )
                 Text(
-                    text = "Data riwayat aktual dari catatan harian sesuai resep dokter yang tersimpan di perangkat.",
+                    text = "Catatan harian rutinitas pagi, malam, jadwal aktif malam, dan obat minum Doxihat 100 mg.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = glass.textSecondary
                 )
             }
         }
 
-        if (uiState.historyRecords.isEmpty()) {
+        // Segmented Filter Pill Bar: 7 Hari | 30 Hari | Semua
+        item(key = "filter_segmented_bar") {
+            LiquidSegmentedBar(
+                options = listOf("7 Hari", "30 Hari", "Semua"),
+                selectedIndex = selectedFilterIndex,
+                onSelect = { selectedFilterIndex = it },
+                optionTestTags = listOf(
+                    "history_filter_7d",
+                    "history_filter_30d",
+                    "history_filter_all"
+                )
+            )
+        }
+
+        // Weekly Summary 2x2 Frosted Glass Grid
+        item(key = "weekly_summary_card") {
+            WeeklyAdherenceSummaryCard(summary = uiState.weeklySummary)
+        }
+
+        if (filteredRecords.isEmpty()) {
             item(key = "empty_history") {
-                EmptyHistoryStateCard()
+                LiquidGlassSurface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("empty_history_card"),
+                    cornerRadius = 24.dp,
+                    contentPadding = PaddingValues(24.dp)
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Belum Ada Catatan Riwayat",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = glass.textPrimary
+                        )
+                        Text(
+                            text = "Centang langkah rutinitas Anda di tab Hari Ini untuk mulai merekam riwayat kepatuhan harian secara otomatis.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = glass.textSecondary
+                        )
+                    }
+                }
             }
         } else {
-            item(key = "weekly_summary") {
-                WeeklySummaryCard(summary = uiState.weeklySummary)
-            }
-
             items(
-                items = uiState.historyRecords,
+                items = filteredRecords,
                 key = { it.dateIso }
-            ) { dayRecord ->
-                HistoryDayCard(record = dayRecord)
+            ) { record ->
+                val isExpanded = record.dateIso in expandedDates
+                DailyHistoryRecordCard(
+                    record = record,
+                    isExpanded = isExpanded,
+                    onToggleExpand = {
+                        expandedDates = if (isExpanded) {
+                            expandedDates - record.dateIso
+                        } else {
+                            expandedDates + record.dateIso
+                        }
+                    }
+                )
             }
         }
     }
 }
 
 @Composable
-private fun EmptyHistoryStateCard() {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 12.dp)
-            .testTag("history_empty_state_card"),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.History,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(40.dp)
-            )
-            Text(
-                text = "Belum Ada Catatan Riwayat",
-                style = MaterialTheme.typography.titleMedium
-            )
-            Text(
-                text = "Centang langkah perawatan pagi atau malam pada tab Hari Ini. Setiap perubahan akan langsung tersimpan sebagai riwayat tanggal tersebut.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
-private fun WeeklySummaryCard(summary: WeeklyHistorySummaryUi) {
-    Card(
+private fun WeeklyAdherenceSummaryCard(summary: WeeklyHistorySummaryUi) {
+    val glass = LiquidGlassTokens.colors
+    LiquidGlassSurface(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("weekly_summary_card"),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        cornerRadius = 26.dp,
+        isElevated = true,
+        isHighlighted = true,
+        contentPadding = PaddingValues(16.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Outlined.CalendarMonth,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
                     text = "Ringkasan 7 Hari Terakhir",
-                    style = MaterialTheme.typography.titleMedium
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = glass.textPrimary
+                )
+                LiquidGlassPill(
+                    text = "${summary.totalTasksCompletedCount} langkah selesai",
+                    containerColor = glass.accentSoftGlow,
+                    contentColor = glass.accentPrimaryBlue
                 )
             }
 
+            // 2x2 Frosted Glass Stat Grid
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                SummaryMetricBox(
+                SummaryStatGlassTile(
+                    icon = Icons.Outlined.Insights,
+                    label = "Rata-rata Progres",
+                    value = "${summary.averageCompletionPercentage}%",
+                    modifier = Modifier.weight(1f)
+                )
+                SummaryStatGlassTile(
+                    icon = Icons.Outlined.CalendarToday,
                     label = "Hari Tercatat",
                     value = "${summary.recordedDaysCount} hari",
                     modifier = Modifier.weight(1f)
                 )
-                SummaryMetricBox(
-                    label = "Rata-rata Selesai",
-                    value = "${summary.averageCompletionPercentage}%",
-                    modifier = Modifier.weight(1f)
-                )
             }
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                SummaryMetricBox(
-                    label = "Pagi Lengkap",
+                SummaryStatGlassTile(
+                    icon = Icons.Outlined.WbSunny,
+                    label = "Pagi Tuntas",
                     value = "${summary.fullMorningDaysCount} hari",
                     modifier = Modifier.weight(1f)
                 )
-                SummaryMetricBox(
-                    label = "Malam Lengkap",
+                SummaryStatGlassTile(
+                    icon = Icons.Outlined.Bedtime,
+                    label = "Malam Tuntas",
                     value = "${summary.fullEveningDaysCount} hari",
                     modifier = Modifier.weight(1f)
                 )
@@ -190,47 +238,86 @@ private fun WeeklySummaryCard(summary: WeeklyHistorySummaryUi) {
 }
 
 @Composable
-private fun SummaryMetricBox(
+private fun SummaryStatGlassTile(
+    icon: ImageVector,
     label: String,
     value: String,
     modifier: Modifier = Modifier
 ) {
+    val glass = LiquidGlassTokens.colors
     Surface(
         modifier = modifier,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-        shape = MaterialTheme.shapes.small
+        color = glass.glassSurfaceSecondary,
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, glass.glassBorderStrong)
     ) {
-        Column(modifier = Modifier.padding(10.dp)) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                glass.accentPrimaryBlue.copy(alpha = 0.2f),
+                                glass.accentElectricCyan.copy(alpha = 0.25f)
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = glass.accentPrimaryBlue,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Column {
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = glass.textPrimary
+                )
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = glass.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun HistoryDayCard(record: HistoryDayRecordUi) {
-    var expanded by rememberSaveable(record.dateIso) { mutableStateOf(false) }
+private fun DailyHistoryRecordCard(
+    record: HistoryDayRecordUi,
+    isExpanded: Boolean,
+    onToggleExpand: () -> Unit
+) {
+    val glass = LiquidGlassTokens.colors
+    val totalRequired = (record.morningTotal + record.eveningTotal).coerceAtLeast(1)
+    val totalDone = record.morningCompleted + record.eveningCompleted
+    val progress = (totalDone.toFloat() / totalRequired.toFloat()).coerceIn(0f, 1f)
 
-    Card(
+    LiquidGlassSurface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { expanded = !expanded }
+            .clickable(onClick = onToggleExpand)
             .testTag("history_day_card_${record.dateIso}"),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        cornerRadius = 24.dp,
+        isElevated = isExpanded,
+        isHighlighted = record.completionPercentage >= 100,
+        contentPadding = PaddingValues(16.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -239,167 +326,175 @@ private fun HistoryDayCard(record: HistoryDayRecordUi) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = record.formattedDate,
-                        style = MaterialTheme.typography.titleMedium
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = glass.textPrimary
                     )
                     Text(
-                        text = "Jadwal Malam: ${record.scheduledEveningProduct}",
+                        text = "Produk malam terjadwal: ${record.scheduledEveningProduct}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        fontWeight = FontWeight.Medium,
+                        color = glass.accentPrimaryBlue
                     )
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        shape = MaterialTheme.shapes.small
-                    ) {
-                        Text(
-                            text = "${record.completionPercentage}%",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
-                                .testTag("history_pct_${record.dateIso}")
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(6.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    LiquidGlassPill(
+                        text = "${record.completionPercentage}%",
+                        containerColor = if (record.completionPercentage >= 100) glass.successSoftBg else glass.accentSoftGlow,
+                        contentColor = if (record.completionPercentage >= 100) glass.successMint else glass.accentPrimaryBlue
+                    )
                     Icon(
-                        imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                        contentDescription = if (expanded) "Tutup rincian" else "Lihat rincian",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        imageVector = if (isExpanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                        contentDescription = if (isExpanded) "Tutup rincian" else "Lihat rincian",
+                        tint = glass.textSecondary
                     )
                 }
             }
 
             LinearProgressIndicator(
-                progress = { (record.completionPercentage / 100f).coerceIn(0f, 1f) },
+                progress = { progress },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(6.dp),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant
+                    .height(7.dp)
+                    .clip(CircleShape),
+                color = if (record.completionPercentage >= 100) glass.successMint else glass.accentElectricCyan,
+                trackColor = glass.progressTrack
             )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                PeriodStatusPill(
-                    label = "Pagi: ${record.morningCompleted}/${record.morningTotal}",
-                    isComplete = record.isMorningFullyDone
+                LiquidGlassPill(
+                    text = "Pagi: ${record.morningCompleted}/${record.morningTotal}",
+                    containerColor = glass.glassSurfaceSecondary,
+                    contentColor = glass.textPrimary
                 )
-                PeriodStatusPill(
-                    label = "Malam: ${record.eveningCompleted}/${record.eveningTotal}",
-                    isComplete = record.isEveningFullyDone
+                LiquidGlassPill(
+                    text = "Malam: ${record.eveningCompleted}/${record.eveningTotal}",
+                    containerColor = glass.glassSurfaceSecondary,
+                    contentColor = glass.textPrimary
                 )
                 if (record.optionalCompleted > 0) {
-                    PeriodStatusPill(
-                        label = "+${record.optionalCompleted} opsional",
-                        isComplete = true
+                    LiquidGlassPill(
+                        text = "Opsional: +${record.optionalCompleted}",
+                        containerColor = glass.accentSoftGlow,
+                        contentColor = glass.accentPrimaryBlue
                     )
                 }
             }
 
+            // Oral medication badges if logged on that day
             if (record.medicationBreakfastStatus != null || record.medicationDinnerStatus != null) {
-                val bStatus = when (record.medicationBreakfastStatus) {
-                    "TAKEN" -> "Sudah diminum"
-                    "MISSED" -> "Belum/terlewat"
-                    else -> "-"
+                Surface(
+                    color = glass.glassSurfaceSecondary,
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, glass.glassBorderSubtle)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.MedicalServices,
+                            contentDescription = null,
+                            tint = glass.accentPrimaryBlue,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        val bStatus = when (record.medicationBreakfastStatus) {
+                            "TAKEN" -> "Pagi: Diminum"
+                            "MISSED" -> "Pagi: Terlewat"
+                            else -> "Pagi: -"
+                        }
+                        val dStatus = when (record.medicationDinnerStatus) {
+                            "TAKEN" -> "Malam: Diminum"
+                            "MISSED" -> "Malam: Terlewat"
+                            else -> "Malam: -"
+                        }
+                        Text(
+                            text = "Doxihat 100 mg • $bStatus | $dStatus",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = glass.textPrimary
+                        )
+                    }
                 }
-                val dStatus = when (record.medicationDinnerStatus) {
-                    "TAKEN" -> "Sudah diminum"
-                    "MISSED" -> "Belum/terlewat"
-                    else -> "-"
-                }
-                Text(
-                    text = "${RoutineScheduleHelper.ORAL_MEDICATION_NAME} • Pagi: $bStatus | Malam: $dStatus",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.secondary
-                )
             }
 
-            AnimatedVisibility(visible = expanded) {
-                Column(
-                    modifier = Modifier.padding(top = 6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            AnimatedVisibility(visible = isExpanded) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HorizontalDivider(color = glass.glassBorderSubtle)
+                    Text(
+                        text = "Rincian Langkah (${record.dateIso}):",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = glass.accentPrimaryBlue
+                    )
 
-                    if (record.completedTasks.isNotEmpty()) {
-                        Text(
-                            text = "Langkah Selesai (${record.completedTasks.size}):",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        record.completedTasks.forEach { task ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                    val allTasksForDay = record.completedTasks + record.missedTasks
+                    allTasksForDay.forEach { taskItem ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
                                 Icon(
-                                    imageVector = Icons.Outlined.CheckCircle,
+                                    imageVector = if (taskItem.isCompleted) {
+                                        Icons.Outlined.CheckCircle
+                                    } else {
+                                        Icons.Outlined.RadioButtonUnchecked
+                                    },
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(15.dp)
+                                    tint = if (taskItem.isCompleted) {
+                                        glass.successMint
+                                    } else {
+                                        glass.textMuted
+                                    },
+                                    modifier = Modifier.size(16.dp)
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "${if (task.period == "MORNING") "[Pagi]" else "[Malam]"} ${task.title} — ${task.productName}",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                        }
-                    }
-
-                    if (record.missedTasks.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "Langkah Belum Tercatat (${record.missedTasks.size}):",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        record.missedTasks.forEach { task ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Outlined.RadioButtonUnchecked,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "${if (task.period == "MORNING") "[Pagi]" else "[Malam]"} ${task.title} — ${task.productName}",
+                                    text = "${if (taskItem.period == "MORNING") "[Pagi]" else "[Malam]"} ${taskItem.title}",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = if (taskItem.isCompleted) {
+                                        glass.textPrimary
+                                    } else {
+                                        glass.textSecondary
+                                    }
                                 )
                             }
+
+                            val timeText = taskItem.completedAtMillis?.let { millis ->
+                                val lt = java.time.Instant.ofEpochMilli(millis)
+                                    .atZone(java.time.ZoneId.systemDefault())
+                                    .toLocalTime()
+                                RoutineScheduleHelper.formatTimeHm(lt.hour, lt.minute)
+                            }
+                            Text(
+                                text = if (taskItem.isCompleted) (timeText ?: "Selesai") else "Terlewat",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (taskItem.isCompleted) {
+                                    glass.successMint
+                                } else {
+                                    glass.textMuted
+                                }
+                            )
                         }
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun PeriodStatusPill(
-    label: String,
-    isComplete: Boolean
-) {
-    Surface(
-        color = if (isComplete) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant
-        },
-        shape = MaterialTheme.shapes.extraSmall
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (isComplete) {
-                MaterialTheme.colorScheme.onPrimaryContainer
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-        )
     }
 }

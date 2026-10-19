@@ -10,7 +10,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -19,9 +23,13 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.History
@@ -32,8 +40,7 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
@@ -45,14 +52,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.local.SkinCareDatabase
@@ -66,37 +80,39 @@ import com.example.ui.MainNavTab
 import com.example.ui.SkinCareUiState
 import com.example.ui.SkinCareViewModel
 import com.example.ui.components.FirstRunNotificationSetupDialog
+import com.example.ui.components.LiquidGlassBackground
 import com.example.ui.components.NonBlockingStepTimerBar
 import com.example.ui.screens.HistoryScreen
 import com.example.ui.screens.ReminderSettingsScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.TodayScreen
+import com.example.ui.theme.LiquidGlassTokens
 import com.example.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
 
-    private var pendingTargetPeriodFromNotification: String? = null
+    private var pendingTargetPeriodFromNotification by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        NotificationHelper.createNotificationChannel(this)
+
+        NotificationHelper.createNotificationChannel(applicationContext)
         pendingTargetPeriodFromNotification =
             intent?.getStringExtra(NotificationHelper.EXTRA_TARGET_PERIOD)
 
-        val app = application as? SkinCareApplication
-        val database = app?.database ?: SkinCareDatabase.getInstance(this)
-        val prefsRepo = app?.preferencesRepository ?: UserPreferencesRepository(this.skinCareDataStore)
-        val repository = app?.repository ?: SkinCareRepository(database.skinCareDao(), prefsRepo)
-        val scheduler = app?.reminderScheduler ?: ReminderScheduler(this)
+        val database = SkinCareDatabase.getInstance(applicationContext)
+        val preferencesRepository = UserPreferencesRepository(applicationContext.skinCareDataStore)
+        val repository = SkinCareRepository(database.skinCareDao(), preferencesRepository)
+        val reminderScheduler = ReminderScheduler(applicationContext)
 
         setContent {
             val viewModel: SkinCareViewModel = viewModel(
                 factory = SkinCareViewModel.provideFactory(
-                    context = this,
+                    context = applicationContext,
                     repository = repository,
-                    preferencesRepository = prefsRepo,
-                    reminderScheduler = scheduler
+                    preferencesRepository = preferencesRepository,
+                    reminderScheduler = reminderScheduler
                 )
             )
             val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -201,170 +217,173 @@ fun SkinCareDailyAppRoot(
         )
     }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val isExpandedScreen = maxWidth >= 640.dp
+    LiquidGlassBackground(modifier = Modifier.fillMaxSize()) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val isExpandedScreen = maxWidth >= 640.dp
 
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            contentWindowInsets = WindowInsets.safeDrawing,
-            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-            bottomBar = {
-                if (!isExpandedScreen) {
-                    SkinCareBottomNavigationBar(
-                        selectedTab = uiState.selectedTab,
-                        onSelectTab = viewModel::selectTab
-                    )
-                }
-            }
-        ) { innerPadding ->
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-            ) {
-                if (isExpandedScreen) {
-                    SkinCareNavigationRail(
-                        selectedTab = uiState.selectedTab,
-                        onSelectTab = viewModel::selectTab
-                    )
-                }
-
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.TopCenter
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .widthIn(max = 720.dp)
-                            .fillMaxHeight()
-                    ) {
-                        // Non-blocking 3-minute step interval timer bar (visible across all tabs when running)
-                        NonBlockingStepTimerBar(
-                            timerState = uiState.stepTimer,
-                            onTogglePauseResume = viewModel::togglePauseResumeStepTimer,
-                            onResetAndDismiss = viewModel::resetAndDismissStepTimer,
-                            onRestartThreeMinutes = { viewModel.startStepTimer(uiState.stepTimer.contextLabel) }
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                containerColor = Color.Transparent,
+                contentWindowInsets = WindowInsets.safeDrawing,
+                snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+                bottomBar = {
+                    if (!isExpandedScreen) {
+                        SkinCareBottomNavigationBar(
+                            selectedTab = uiState.selectedTab,
+                            onSelectTab = viewModel::selectTab
                         )
+                    }
+                }
+            ) { innerPadding ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                ) {
+                    if (isExpandedScreen) {
+                        SkinCareNavigationRail(
+                            selectedTab = uiState.selectedTab,
+                            onSelectTab = viewModel::selectTab
+                        )
+                    }
 
-                        when (uiState.selectedTab) {
-                            MainNavTab.TODAY -> {
-                                TodayScreen(
-                                    uiState = uiState,
-                                    onToggleTask = viewModel::toggleTaskCompletion,
-                                    onStartStepTimer = viewModel::startStepTimer,
-                                    onResetTodayChecklist = viewModel::resetTodayChecklist,
-                                    onOpenReminderSettings = { viewModel.selectTab(MainNavTab.REMINDERS) },
-                                    onPauseOrResumeSunscreen = { pause ->
-                                        val s = uiState.settings
-                                        viewModel.configureSunscreenReminder(
-                                            enabled = true,
-                                            startHour = s.sunscreenStartHour,
-                                            startMinute = s.sunscreenStartMinute,
-                                            endHour = s.sunscreenEndHour,
-                                            intervalHours = s.sunscreenIntervalHours,
-                                            paused = pause,
-                                            preOutdoorEnabled = s.sunscreenPreOutdoorEnabled
-                                        )
-                                    },
-                                    onStopSunscreen = {
-                                        val s = uiState.settings
-                                        viewModel.configureSunscreenReminder(
-                                            enabled = false,
-                                            startHour = s.sunscreenStartHour,
-                                            startMinute = s.sunscreenStartMinute,
-                                            endHour = s.sunscreenEndHour,
-                                            intervalHours = s.sunscreenIntervalHours,
-                                            paused = false,
-                                            preOutdoorEnabled = s.sunscreenPreOutdoorEnabled
-                                        )
-                                    },
-                                    onLogMedicationDose = viewModel::recordMedicationDose,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.TopCenter
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .widthIn(max = 720.dp)
+                                .fillMaxHeight()
+                        ) {
+                            // Non-blocking 3-minute step interval timer bar (visible across all tabs when running)
+                            NonBlockingStepTimerBar(
+                                timerState = uiState.stepTimer,
+                                onTogglePauseResume = viewModel::togglePauseResumeStepTimer,
+                                onResetAndDismiss = viewModel::resetAndDismissStepTimer,
+                                onRestartThreeMinutes = { viewModel.startStepTimer(uiState.stepTimer.contextLabel) }
+                            )
 
-                            MainNavTab.REMINDERS -> {
-                                ReminderSettingsScreen(
-                                    uiState = uiState,
-                                    onRequestNotificationPermission = requestNotificationPermissionIfNeeded,
-                                    onUpdateMorningReminder = viewModel::updateMorningReminder,
-                                    onUpdateEveningReminder = viewModel::updateEveningReminder,
-                                    onUpdateFollowUpAndSnooze = viewModel::updateFollowUpAndSnooze,
-                                    onToggleStepReminder = viewModel::toggleStepReminder,
-                                    onConfigureSunscreenReminder = { enabled, startH, startM, endH, intervalH, paused ->
-                                        viewModel.configureSunscreenReminder(
-                                            enabled = enabled,
-                                            startHour = startH,
-                                            startMinute = startM,
-                                            endHour = endH,
-                                            intervalHours = intervalH,
-                                            paused = paused,
-                                            preOutdoorEnabled = uiState.settings.sunscreenPreOutdoorEnabled
-                                        )
-                                    },
-                                    onConfirmAndSaveMedication = viewModel::confirmAndSaveMedicationSchedule,
-                                    onUpdateDoctorControlReminder = viewModel::updateDoctorControlReminder,
-                                    onTriggerTestNotification = viewModel::triggerTestNotification,
-                                    onRescheduleAllReminders = viewModel::rescheduleAllRemindersManually,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
+                            when (uiState.selectedTab) {
+                                MainNavTab.TODAY -> {
+                                    TodayScreen(
+                                        uiState = uiState,
+                                        onToggleTask = viewModel::toggleTaskCompletion,
+                                        onStartStepTimer = viewModel::startStepTimer,
+                                        onResetTodayChecklist = viewModel::resetTodayChecklist,
+                                        onOpenReminderSettings = { viewModel.selectTab(MainNavTab.REMINDERS) },
+                                        onPauseOrResumeSunscreen = { pause ->
+                                            val s = uiState.settings
+                                            viewModel.configureSunscreenReminder(
+                                                enabled = true,
+                                                startHour = s.sunscreenStartHour,
+                                                startMinute = s.sunscreenStartMinute,
+                                                endHour = s.sunscreenEndHour,
+                                                intervalHours = s.sunscreenIntervalHours,
+                                                paused = pause,
+                                                preOutdoorEnabled = s.sunscreenPreOutdoorEnabled
+                                            )
+                                        },
+                                        onStopSunscreen = {
+                                            val s = uiState.settings
+                                            viewModel.configureSunscreenReminder(
+                                                enabled = false,
+                                                startHour = s.sunscreenStartHour,
+                                                startMinute = s.sunscreenStartMinute,
+                                                endHour = s.sunscreenEndHour,
+                                                intervalHours = s.sunscreenIntervalHours,
+                                                paused = false,
+                                                preOutdoorEnabled = s.sunscreenPreOutdoorEnabled
+                                            )
+                                        },
+                                        onLogMedicationDose = viewModel::recordMedicationDose,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
 
-                            MainNavTab.HISTORY -> {
-                                HistoryScreen(
-                                    uiState = uiState,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
+                                MainNavTab.REMINDERS -> {
+                                    ReminderSettingsScreen(
+                                        uiState = uiState,
+                                        onRequestNotificationPermission = requestNotificationPermissionIfNeeded,
+                                        onUpdateMorningReminder = viewModel::updateMorningReminder,
+                                        onUpdateEveningReminder = viewModel::updateEveningReminder,
+                                        onUpdateFollowUpAndSnooze = viewModel::updateFollowUpAndSnooze,
+                                        onToggleStepReminder = viewModel::toggleStepReminder,
+                                        onConfigureSunscreenReminder = { enabled, startH, startM, endH, intervalH, paused ->
+                                            viewModel.configureSunscreenReminder(
+                                                enabled = enabled,
+                                                startHour = startH,
+                                                startMinute = startM,
+                                                endHour = endH,
+                                                intervalHours = intervalH,
+                                                paused = paused,
+                                                preOutdoorEnabled = uiState.settings.sunscreenPreOutdoorEnabled
+                                            )
+                                        },
+                                        onConfirmAndSaveMedication = viewModel::confirmAndSaveMedicationSchedule,
+                                        onUpdateDoctorControlReminder = viewModel::updateDoctorControlReminder,
+                                        onTriggerTestNotification = viewModel::triggerTestNotification,
+                                        onRescheduleAllReminders = viewModel::rescheduleAllRemindersManually,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
 
-                            MainNavTab.SETTINGS -> {
-                                SettingsScreen(
-                                    uiState = uiState,
-                                    onSelectTheme = viewModel::setThemeMode,
-                                    onToggleHideSensitiveNotifications = viewModel::setHideSensitiveNotifications,
-                                    onOpenReminderSettings = { viewModel.selectTab(MainNavTab.REMINDERS) },
-                                    onAddCustomTask = { period, title, product, instruction, mins, isOptional, category, daysCsv, usage, area ->
-                                        viewModel.addCustomTask(
-                                            period = period,
-                                            title = title,
-                                            productName = product,
-                                            instruction = instruction,
-                                            estimatedMinutes = mins,
-                                            isOptional = isOptional,
-                                            reminderEnabled = false,
-                                            reminderOffsetMinutes = 3,
-                                            category = category,
-                                            usageAmount = usage,
-                                            applicationArea = area,
-                                            scheduledDaysCsv = daysCsv
-                                        )
-                                    },
-                                    onUpdateTask = { task, title, product, instruction, mins, isOptional, isActive, category, daysCsv, usage, area ->
-                                        viewModel.updateTaskDetails(
-                                            taskId = task.id,
-                                            title = title,
-                                            productName = product,
-                                            instruction = instruction,
-                                            estimatedMinutes = mins,
-                                            isOptional = isOptional,
-                                            isActive = isActive,
-                                            reminderEnabled = task.reminderEnabled,
-                                            reminderOffsetMinutes = task.reminderOffsetMinutes,
-                                            category = category,
-                                            usageAmount = usage,
-                                            applicationArea = area,
-                                            scheduledDaysCsv = daysCsv
-                                        )
-                                    },
-                                    onMoveTaskOrder = viewModel::moveTaskOrder,
-                                    onRetireTask = { task -> viewModel.retireTask(task.id, task.title) },
-                                    onRestoreTaskActive = { task -> viewModel.restoreTaskActive(task.id, task.title) },
-                                    onRestoreDermatologistDefaultRoutine = viewModel::restoreDermatologistDefaultRoutine,
-                                    onExportJson = viewModel::exportBackupJson,
-                                    onImportJson = viewModel::importBackupJson,
-                                    modifier = Modifier.weight(1f)
-                                )
+                                MainNavTab.HISTORY -> {
+                                    HistoryScreen(
+                                        uiState = uiState,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+
+                                MainNavTab.SETTINGS -> {
+                                    SettingsScreen(
+                                        uiState = uiState,
+                                        onSelectTheme = viewModel::setThemeMode,
+                                        onToggleHideSensitiveNotifications = viewModel::setHideSensitiveNotifications,
+                                        onOpenReminderSettings = { viewModel.selectTab(MainNavTab.REMINDERS) },
+                                        onAddCustomTask = { period, title, product, instruction, mins, isOptional, category, daysCsv, usage, area ->
+                                            viewModel.addCustomTask(
+                                                period = period,
+                                                title = title,
+                                                productName = product,
+                                                instruction = instruction,
+                                                estimatedMinutes = mins,
+                                                isOptional = isOptional,
+                                                reminderEnabled = false,
+                                                reminderOffsetMinutes = 3,
+                                                category = category,
+                                                usageAmount = usage,
+                                                applicationArea = area,
+                                                scheduledDaysCsv = daysCsv
+                                            )
+                                        },
+                                        onUpdateTask = { task, title, product, instruction, mins, isOptional, isActive, category, daysCsv, usage, area ->
+                                            viewModel.updateTaskDetails(
+                                                taskId = task.id,
+                                                title = title,
+                                                productName = product,
+                                                instruction = instruction,
+                                                estimatedMinutes = mins,
+                                                isOptional = isOptional,
+                                                isActive = isActive,
+                                                reminderEnabled = task.reminderEnabled,
+                                                reminderOffsetMinutes = task.reminderOffsetMinutes,
+                                                category = category,
+                                                usageAmount = usage,
+                                                applicationArea = area,
+                                                scheduledDaysCsv = daysCsv
+                                            )
+                                        },
+                                        onMoveTaskOrder = viewModel::moveTaskOrder,
+                                        onRetireTask = { task -> viewModel.retireTask(task.id, task.title) },
+                                        onRestoreTaskActive = { task -> viewModel.restoreTaskActive(task.id, task.title) },
+                                        onRestoreDermatologistDefaultRoutine = viewModel::restoreDermatologistDefaultRoutine,
+                                        onExportJson = viewModel::exportBackupJson,
+                                        onImportJson = viewModel::importBackupJson,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
                             }
                         }
                     }
@@ -374,29 +393,103 @@ fun SkinCareDailyAppRoot(
     }
 }
 
+/**
+ * Floating Frosted Glass Pill Bottom Navigation Bar with glowing active pill capsule.
+ */
 @Composable
 private fun SkinCareBottomNavigationBar(
     selectedTab: MainNavTab,
     onSelectTab: (MainNavTab) -> Unit
 ) {
-    NavigationBar(modifier = Modifier.testTag("bottom_navigation_bar")) {
-        MainNavTab.entries.forEach { tab ->
-            val selected = selectedTab == tab
-            NavigationBarItem(
-                selected = selected,
-                onClick = { onSelectTab(tab) },
-                icon = {
-                    val icon = when (tab) {
-                        MainNavTab.TODAY -> if (selected) Icons.Filled.CalendarToday else Icons.Outlined.CalendarToday
-                        MainNavTab.REMINDERS -> if (selected) Icons.Filled.Notifications else Icons.Outlined.Notifications
-                        MainNavTab.HISTORY -> if (selected) Icons.Filled.History else Icons.Outlined.History
-                        MainNavTab.SETTINGS -> if (selected) Icons.Filled.Settings else Icons.Outlined.Settings
+    val glass = LiquidGlassTokens.colors
+    val pillShape = RoundedCornerShape(30.dp)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .testTag("bottom_navigation_bar"),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 520.dp)
+                .shadow(
+                    elevation = 16.dp,
+                    shape = pillShape,
+                    ambientColor = glass.accentDeepBlue.copy(alpha = 0.18f),
+                    spotColor = glass.accentPrimaryBlue.copy(alpha = 0.24f)
+                )
+                .clip(pillShape)
+                .background(glass.glassSurfaceElevated)
+                .border(
+                    width = 1.dp,
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            glass.glassHighlightTop,
+                            glass.glassBorderStrong,
+                            glass.accentElectricCyan.copy(alpha = 0.45f)
+                        )
+                    ),
+                    shape = pillShape
+                )
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            MainNavTab.entries.forEach { tab ->
+                val selected = selectedTab == tab
+                val icon = when (tab) {
+                    MainNavTab.TODAY -> if (selected) Icons.Filled.CalendarToday else Icons.Outlined.CalendarToday
+                    MainNavTab.REMINDERS -> if (selected) Icons.Filled.Notifications else Icons.Outlined.Notifications
+                    MainNavTab.HISTORY -> if (selected) Icons.Filled.History else Icons.Outlined.History
+                    MainNavTab.SETTINGS -> if (selected) Icons.Filled.Settings else Icons.Outlined.Settings
+                }
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(CircleShape)
+                        .background(
+                            brush = if (selected) {
+                                Brush.horizontalGradient(
+                                    colors = listOf(
+                                        glass.accentPrimaryBlue,
+                                        glass.accentElectricCyan
+                                    )
+                                )
+                            } else {
+                                Brush.horizontalGradient(
+                                    colors = listOf(Color.Transparent, Color.Transparent)
+                                )
+                            }
+                        )
+                        .clickable { onSelectTab(tab) }
+                        .padding(vertical = 8.dp, horizontal = 4.dp)
+                        .testTag("nav_tab_${tab.route}"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = tab.label,
+                            tint = if (selected) Color.White else glass.textSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = tab.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (selected) Color.White else glass.textSecondary
+                        )
                     }
-                    Icon(imageVector = icon, contentDescription = tab.label)
-                },
-                label = { Text(tab.label) },
-                modifier = Modifier.testTag("nav_tab_${tab.route}")
-            )
+                }
+            }
         }
     }
 }
@@ -406,7 +499,11 @@ private fun SkinCareNavigationRail(
     selectedTab: MainNavTab,
     onSelectTab: (MainNavTab) -> Unit
 ) {
-    NavigationRail(modifier = Modifier.testTag("side_navigation_rail")) {
+    val glass = LiquidGlassTokens.colors
+    NavigationRail(
+        containerColor = glass.glassSurfaceElevated,
+        modifier = Modifier.testTag("side_navigation_rail")
+    ) {
         MainNavTab.entries.forEach { tab ->
             val selected = selectedTab == tab
             NavigationRailItem(

@@ -4,7 +4,9 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -17,49 +19,49 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
-import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.FileUpload
-import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material.icons.outlined.Restore
-import androidx.compose.material.icons.outlined.Security
-import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.RestartAlt
+import androidx.compose.material.icons.outlined.VerifiedUser
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.local.RoutineTaskEntity
 import com.example.data.preferences.ThemeMode
@@ -67,8 +69,12 @@ import com.example.domain.ProductCategory
 import com.example.domain.RoutinePeriod
 import com.example.domain.RoutineScheduleHelper
 import com.example.ui.SkinCareUiState
-import com.example.ui.components.ProductCategoryBadge
-import java.time.DayOfWeek
+import com.example.ui.components.LiquidGlassSurface
+import com.example.ui.components.LiquidPrimaryActionButton
+import com.example.ui.components.LiquidSecondaryGlassButton
+import com.example.ui.components.LiquidSegmentedBar
+import com.example.ui.components.ProductBottleGlyph
+import com.example.ui.theme.LiquidGlassTokens
 
 @Composable
 fun SettingsScreen(
@@ -101,7 +107,7 @@ fun SettingsScreen(
         usageAmount: String,
         applicationArea: String
     ) -> Unit,
-    onMoveTaskOrder: (String, Boolean) -> Unit,
+    onMoveTaskOrder: (taskId: String, moveUp: Boolean) -> Unit,
     onRetireTask: (RoutineTaskEntity) -> Unit,
     onRestoreTaskActive: (RoutineTaskEntity) -> Unit,
     onRestoreDermatologistDefaultRoutine: () -> Unit,
@@ -110,79 +116,102 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var showAddTaskDialog by rememberSaveable { mutableStateOf(false) }
-    var editingTask by remember { mutableStateOf<RoutineTaskEntity?>(null) }
-    var retiringTask by remember { mutableStateOf<RoutineTaskEntity?>(null) }
-    var showRestoreDefaultConfirm by rememberSaveable { mutableStateOf(false) }
-    var exportedJsonText by rememberSaveable { mutableStateOf<String?>(null) }
-    var showImportJsonDialog by rememberSaveable { mutableStateOf(false) }
+    val glass = LiquidGlassTokens.colors
 
-    val activeTasks = uiState.allTasksForEditor.filter { it.isActive }
-    val retiredTasks = uiState.allTasksForEditor.filter { !it.isActive }
+    var showEditorDialog by rememberSaveable { mutableStateOf(false) }
+    var editingTaskId by rememberSaveable { mutableStateOf<String?>(null) }
+
+    var exportedJsonPreview by rememberSaveable { mutableStateOf<String?>(null) }
+    var showImportDialog by rememberSaveable { mutableStateOf(false) }
+    var importJsonInput by rememberSaveable { mutableStateOf("") }
+    var showConfirmResetDefault by rememberSaveable { mutableStateOf(false) }
+
+    val editingTask: RoutineTaskEntity? = editingTaskId?.let { id ->
+        uiState.allTasksForEditor.firstOrNull { it.id == id }
+    }
+
+    val liquidSwitchColors = SwitchDefaults.colors(
+        checkedThumbColor = Color.White,
+        checkedTrackColor = glass.accentElectricCyan,
+        uncheckedThumbColor = glass.textSecondary,
+        uncheckedTrackColor = glass.glassSurfaceSecondary,
+        uncheckedBorderColor = glass.glassBorderSubtle
+    )
 
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .testTag("settings_screen_list"),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            .testTag("app_settings_list"),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 112.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        item(key = "settings_header") {
-            Column {
+        item(key = "header") {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "Pengaturan & Editor Resep",
+                    text = "Pengaturan Aplikasi",
                     style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onBackground
+                    fontWeight = FontWeight.ExtraBold,
+                    color = glass.textPrimary
                 )
                 Text(
-                    text = "Sesuaikan tampilan, jadwal hari obat oles, urutan langkah sesuai resep dokter, dan cadangan data lokal.",
+                    text = "Sesuaikan tampilan Liquid Glass, kelola langkah rutinitas resep dokter, cadangkan data, atau tinjau catatan keamanan.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = glass.textSecondary
                 )
             }
         }
 
-        // 1. Appearance & Lock-Screen Notification Privacy
-        item(key = "appearance_privacy_card") {
-            Card(
+        // 1. Theme & Notification Privacy Card
+        item(key = "theme_and_privacy_card") {
+            LiquidGlassSurface(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                cornerRadius = 26.dp,
+                isElevated = true,
+                contentPadding = PaddingValues(16.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Outlined.Palette,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Tampilan & Privasi Layar Kunci",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-
-                    Text(
-                        text = "Tema Aplikasi:",
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ThemeMode.entries.forEach { mode ->
-                            FilterChip(
-                                selected = uiState.settings.themeMode == mode,
-                                onClick = { onSelectTheme(mode) },
-                                label = { Text(mode.labelId) },
-                                modifier = Modifier.testTag("theme_chip_${mode.id}")
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(glass.accentSoftGlow),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.DarkMode,
+                                contentDescription = null,
+                                tint = glass.accentPrimaryBlue,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "Tema Tampilan",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = glass.textPrimary
+                            )
+                            Text(
+                                text = "Pilih suasana Blue Liquid Glass terang atau malam",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = glass.textSecondary
                             )
                         }
                     }
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    val themeModes = ThemeMode.entries
+                    val selectedIndex = themeModes.indexOf(uiState.settings.themeMode).coerceAtLeast(0)
+
+                    LiquidSegmentedBar(
+                        options = themeModes.map { it.labelId },
+                        selectedIndex = selectedIndex,
+                        onSelect = { idx -> onSelectTheme(themeModes[idx]) },
+                        optionTestTags = themeModes.map { "theme_chip_${it.name.lowercase()}" }
+                    )
+
+                    HorizontalDivider(color = glass.glassBorderSubtle)
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -191,613 +220,554 @@ fun SettingsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Sembunyikan Nama Produk & Obat di Layar Kunci",
-                                style = MaterialTheme.typography.titleSmall
+                                text = "Sembunyikan Nama Produk di Layar Kunci",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = glass.textPrimary
                             )
                             Text(
-                                text = "Menampilkan pesan pengingat umum tanpa menyebutkan nama krim atau Doxihat 100 mg pada notifikasi terkunci.",
+                                text = "Menjaga privasi nama obat/produk pada isi notifikasi Android",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = glass.textSecondary
                             )
                         }
                         Switch(
                             checked = uiState.settings.hideSensitiveNotificationContent,
                             onCheckedChange = onToggleHideSensitiveNotifications,
+                            colors = liquidSwitchColors,
                             modifier = Modifier.testTag("hide_sensitive_notif_switch")
                         )
                     }
 
-                    OutlinedButton(
+                    LiquidSecondaryGlassButton(
+                        text = "Buka Pengaturan Pengingat & Jadwal",
                         onClick = onOpenReminderSettings,
+                        leadingIcon = Icons.Outlined.NotificationsActive,
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("settings_open_reminders_button")
-                    ) {
-                        Text("Buka Pengaturan Pengingat & Alarm")
-                    }
+                    )
                 }
             }
         }
 
-        // 2. Routine Editor Header & Actions
+        // 2. Routine Task Editor Card
         item(key = "routine_editor_header") {
-            Card(
+            LiquidGlassSurface(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                cornerRadius = 26.dp,
+                isElevated = true,
+                contentPadding = PaddingValues(16.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = "Editor Rutinitas Berdasarkan Resep Dokter",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Text(
-                        text = "Gunakan data resep dokter sebagai sumber utama. Anda dapat mengatur jadwal hari obat oles (mis. Senin, Rabu, Jumat), memperbarui catatan konfirmasi dokter, atau mengembalikan urutan ke resep asli tanpa menghapus riwayat.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = { showAddTaskDialog = true },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("add_custom_task_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Add,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Tambah Langkah")
-                        }
-
-                        OutlinedButton(
-                            onClick = { showRestoreDefaultConfirm = true },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("restore_default_routine_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Restore,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Reset ke Resep")
-                        }
-                    }
-                }
-            }
-        }
-
-        // 3. Active Routine Tasks List (Reorder / Edit / Retire)
-        items(
-            items = activeTasks,
-            key = { "editor_active_${it.id}" }
-        ) { task ->
-            RoutineEditorTaskRow(
-                task = task,
-                onMoveUp = { onMoveTaskOrder(task.id, true) },
-                onMoveDown = { onMoveTaskOrder(task.id, false) },
-                onEdit = { editingTask = task },
-                onRetire = { retiringTask = task }
-            )
-        }
-
-        // 4. Retired / Inactive Tasks Section (Can be re-enabled anytime)
-        if (retiredTasks.isNotEmpty()) {
-            item(key = "retired_header") {
-                Text(
-                    text = "Langkah Nonaktif / Diarsipkan (${retiredTasks.size})",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            items(
-                items = retiredTasks,
-                key = { "editor_retired_${it.id}" }
-            ) { task ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "${if (task.period == "MORNING") "[Pagi]" else "[Malam]"} ${task.title}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium
+                                text = "Kelola Langkah Rutinitas Resep",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = glass.textPrimary
                             )
                             Text(
-                                text = task.productName,
+                                text = "Atur kategori (Obat Resep / Skincare Pendukung / Sunscreen), jadwal hari, takaran, dan area aplikasi.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = glass.textSecondary
                             )
                         }
-                        FilledTonalButton(
-                            onClick = { onRestoreTaskActive(task) },
-                            modifier = Modifier.testTag("restore_task_btn_${task.id}")
-                        ) {
-                            Text("Aktifkan")
-                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        LiquidPrimaryActionButton(
+                            text = "Tambah",
+                            onClick = {
+                                editingTaskId = null
+                                showEditorDialog = true
+                            },
+                            leadingIcon = Icons.Outlined.Add,
+                            modifier = Modifier.testTag("add_custom_task_button")
+                        )
+                    }
+
+                    val morningTasks = uiState.allTasksForEditor
+                        .filter { it.period == RoutinePeriod.MORNING.id }
+                        .sortedBy { it.sortOrder }
+                    val eveningTasks = uiState.allTasksForEditor
+                        .filter { it.period == RoutinePeriod.EVENING.id }
+                        .sortedBy { it.sortOrder }
+
+                    Text(
+                        text = "Rutinitas Pagi (${morningTasks.size} langkah)",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = glass.accentPrimaryBlue
+                    )
+                    morningTasks.forEachIndexed { idx, task ->
+                        EditableTaskRow(
+                            task = task,
+                            canMoveUp = idx > 0,
+                            canMoveDown = idx < morningTasks.lastIndex,
+                            onMoveUp = { onMoveTaskOrder(task.id, true) },
+                            onMoveDown = { onMoveTaskOrder(task.id, false) },
+                            onToggleActive = { active ->
+                                if (active) onRestoreTaskActive(task) else onRetireTask(task)
+                            },
+                            onEdit = {
+                                editingTaskId = task.id
+                                showEditorDialog = true
+                            },
+                            switchColors = liquidSwitchColors
+                        )
+                    }
+
+                    HorizontalDivider(color = glass.glassBorderSubtle)
+
+                    Text(
+                        text = "Rutinitas Malam (${eveningTasks.size} langkah)",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = glass.accentElectricCyan
+                    )
+                    eveningTasks.forEachIndexed { idx, task ->
+                        EditableTaskRow(
+                            task = task,
+                            canMoveUp = idx > 0,
+                            canMoveDown = idx < eveningTasks.lastIndex,
+                            onMoveUp = { onMoveTaskOrder(task.id, true) },
+                            onMoveDown = { onMoveTaskOrder(task.id, false) },
+                            onToggleActive = { active ->
+                                if (active) onRestoreTaskActive(task) else onRetireTask(task)
+                            },
+                            onEdit = {
+                                editingTaskId = task.id
+                                showEditorDialog = true
+                            },
+                            switchColors = liquidSwitchColors
+                        )
                     }
                 }
             }
         }
 
-        // 5. Local Storage Explanation & JSON Backup Export/Import
-        item(key = "storage_and_backup_card") {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("local_storage_info_card"),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        // 3. Backup Export / Import & Factory Reset Card
+        item(key = "backup_and_restore_card") {
+            LiquidGlassSurface(
+                modifier = Modifier.fillMaxWidth(),
+                cornerRadius = 26.dp,
+                isElevated = true,
+                contentPadding = PaddingValues(16.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Outlined.Storage,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Penyimpanan Data Lokal & Cadangan",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = "Seluruh rutinitas resep, status centang harian, riwayat kepatuhan, dan jadwal pengingat disimpan secara permanen di database lokal perangkat (SQLite Room & Jetpack DataStore), bukan di direktori cache sementara.",
-                        style = MaterialTheme.typography.bodySmall
+                        text = "Cadangkan, Pulihkan & Reset Data",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = glass.textPrimary
                     )
                     Text(
-                        text = "Penting: Karena aplikasi bekerja 100% offline tanpa akun cloud demi privasi kesehatan Anda, data lokal dapat hilang apabila Anda memilih 'Hapus Data' (Clear Storage) di pengaturan sistem Android atau menghapus instalasi (uninstall) aplikasi. Gunakan fitur Ekspor JSON di bawah ini untuk menyimpan salinan cadangan.",
+                        text = "Ekspor seluruh riwayat dan daftar produk ke format teks JSON lokal atau pulihkan ke jadwal resep dokter awal.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = glass.textSecondary
                     )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        FilledTonalButton(
+                        LiquidPrimaryActionButton(
+                            text = "Ekspor JSON",
                             onClick = {
                                 onExportJson { json ->
-                                    exportedJsonText = json
+                                    exportedJsonPreview = json
                                 }
                             },
+                            leadingIcon = Icons.Outlined.FileUpload,
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("export_json_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.FileDownload,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Ekspor JSON")
-                        }
-
-                        OutlinedButton(
-                            onClick = { showImportJsonDialog = true },
+                        )
+                        LiquidSecondaryGlassButton(
+                            text = "Impor JSON",
+                            onClick = { showImportDialog = true },
+                            leadingIcon = Icons.Outlined.FileDownload,
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("import_json_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.FileUpload,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Impor JSON")
-                        }
+                        )
                     }
+
+                    LiquidSecondaryGlassButton(
+                        text = "Kembalikan ke Resep Dokter Awal",
+                        onClick = { showConfirmResetDefault = true },
+                        leadingIcon = Icons.Outlined.RestartAlt,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("reset_default_prescription_button")
+                    )
                 }
             }
         }
 
-        // 6. Medical Disclaimer & Version Footer (Rule 6 & 10)
-        item(key = "disclaimer_footer") {
-            Card(
+        // 4. Medical Safety & No-Peeling / No-Cure-Claim Notice Card
+        item(key = "medical_disclaimer_card") {
+            LiquidGlassSurface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                )
+                    .testTag("medical_disclaimer_card"),
+                cornerRadius = 26.dp,
+                tintColor = glass.warningSoftBg.copy(alpha = 0.35f),
+                contentPadding = PaddingValues(16.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Outlined.Security,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(glass.accentSoftGlow),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.VerifiedUser,
+                                contentDescription = null,
+                                tint = glass.accentPrimaryBlue,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "SkinCare Daily v1.1.0 • Sesuai Resep Dokter",
-                            style = MaterialTheme.typography.labelLarge
+                            text = "Catatan Keamanan Terapi & Disclaimer Medis",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = glass.textPrimary
                         )
                     }
                     Text(
-                        text = "Penafian Medis: Aplikasi ini merupakan alat bantu pencatatan dan pengingat pribadi berdasarkan instruksi resep dokter kulit tertanggal 19 Oktober 2026. Produk pada aplikasi ini tidak diklaim pasti menyembuhkan jerawat atau bekas jerawat karena respons terapi berbeda pada tiap pasien. Jangan melakukan chemical peeling atau tindakan tambahan tanpa konfirmasi dokter yang merawat.",
+                        text = "• ${RoutineScheduleHelper.CHEMICAL_PEELING_WARNING}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        fontWeight = FontWeight.SemiBold,
+                        color = glass.warningAmber
+                    )
+                    Text(
+                        text = "• Aplikasi ini hanya membantu mencatat jadwal resep dokter kulit dan tidak menjamin bahwa produk pasti menyembuhkan jerawat atau bekas jerawat.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = glass.textSecondary
+                    )
+                    Text(
+                        text = "• Jadwal kontrol kembali: 2 minggu setelah mulai terapi sesuai catatan dokter.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = glass.textSecondary
                     )
                 }
             }
         }
     }
 
-    if (showAddTaskDialog) {
-        TaskEditorDialog(
-            initialTask = null,
-            onDismiss = { showAddTaskDialog = false },
-            onSave = { period, title, product, instruction, mins, isOptional, category, daysCsv, usage, area ->
-                showAddTaskDialog = false
-                onAddCustomTask(
-                    period,
-                    title,
-                    product,
-                    instruction,
-                    mins,
-                    isOptional,
-                    category,
-                    daysCsv,
-                    usage,
-                    area
-                )
-            }
-        )
-    }
-
-    editingTask?.let { taskToEdit ->
-        TaskEditorDialog(
-            initialTask = taskToEdit,
-            onDismiss = { editingTask = null },
-            onSave = { _, title, product, instruction, mins, isOptional, category, daysCsv, usage, area ->
-                editingTask = null
-                onUpdateTask(
-                    taskToEdit,
-                    title,
-                    product,
-                    instruction,
-                    mins,
-                    isOptional,
-                    taskToEdit.isActive,
-                    category,
-                    daysCsv,
-                    usage,
-                    area
-                )
-            }
-        )
-    }
-
-    retiringTask?.let { taskToRetire ->
+    // Export JSON Preview Dialog
+    if (exportedJsonPreview != null) {
+        val jsonText = exportedJsonPreview.orEmpty()
         AlertDialog(
-            onDismissRequest = { retiringTask = null },
-            title = { Text("Nonaktifkan Langkah Ini?") },
-            text = {
+            onDismissRequest = { exportedJsonPreview = null },
+            shape = RoundedCornerShape(28.dp),
+            containerColor = glass.glassSurfaceElevated,
+            title = {
                 Text(
-                    "Langkah \"${taskToRetire.title}\" akan disembunyikan dari daftar harian mulai hari ini, namun seluruh riwayat penyelesaian di hari-hari sebelumnya tetap tersimpan utuh."
+                    text = "Data Cadangan JSON",
+                    fontWeight = FontWeight.Bold,
+                    color = glass.textPrimary
                 )
             },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        retiringTask = null
-                        onRetireTask(taskToRetire)
-                    },
-                    modifier = Modifier.testTag("confirm_retire_task_button")
-                ) {
-                    Text("Nonaktifkan")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { retiringTask = null }) {
-                    Text("Batal")
-                }
-            }
-        )
-    }
-
-    if (showRestoreDefaultConfirm) {
-        AlertDialog(
-            onDismissRequest = { showRestoreDefaultConfirm = false },
-            title = { Text("Pulihkan Rutinitas Resep Dokter?") },
-            text = {
-                Text(
-                    "Urutan dan daftar tugas akan dikembalikan sesuai resep dokter kulit (Pagi: Labore AcnePro Cleanser, Moisturizer, Bioderma Sebium Kerato+ tipis seluruh wajah, Sunscreen Labore; Malam: Cleanser, Moisturizer, Pharmalene Gel 1 biji jagung pada Sen/Rab/Jum atau Labore Intensive Acne Serum pada hari lainnya). Catatan riwayat Anda tidak akan terhapus."
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showRestoreDefaultConfirm = false
-                        onRestoreDermatologistDefaultRoutine()
-                    },
-                    modifier = Modifier.testTag("confirm_restore_default_button")
-                ) {
-                    Text("Pulihkan Resep Awal")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRestoreDefaultConfirm = false }) {
-                    Text("Batal")
-                }
-            }
-        )
-    }
-
-    exportedJsonText?.let { json ->
-        AlertDialog(
-            onDismissRequest = { exportedJsonText = null },
-            title = { Text("Cadangan Data JSON") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Salin teks JSON di bawah ini dan simpan di tempat aman:",
-                        style = MaterialTheme.typography.bodySmall
+                        text = "Salin teks JSON di bawah ini untuk disimpan sebagai cadangan:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = glass.textSecondary
                     )
                     OutlinedTextField(
-                        value = json,
+                        value = jsonText,
                         onValueChange = {},
                         readOnly = true,
                         maxLines = 10,
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("exported_json_text_field")
+                            .testTag("exported_json_textfield")
                     )
                 }
             },
             confirmButton = {
-                Button(
+                LiquidPrimaryActionButton(
+                    text = "Salin ke Papan Klip",
+                    leadingIcon = Icons.Outlined.ContentCopy,
                     onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                        clipboard?.setPrimaryClip(ClipData.newPlainText("skincare_daily_backup", json))
-                        exportedJsonText = null
+                        clipboard?.setPrimaryClip(ClipData.newPlainText("SkinCareDailyBackup", jsonText))
+                        exportedJsonPreview = null
                     },
                     modifier = Modifier.testTag("copy_exported_json_button")
-                ) {
-                    Text("Salin & Tutup")
-                }
+                )
             },
             dismissButton = {
-                TextButton(onClick = { exportedJsonText = null }) {
-                    Text("Tutup")
+                TextButton(onClick = { exportedJsonPreview = null }) {
+                    Text("Tutup", color = glass.textSecondary)
                 }
             }
         )
     }
 
-    if (showImportJsonDialog) {
-        var jsonInput by rememberSaveable { mutableStateOf("") }
+    // Import JSON Dialog
+    if (showImportDialog) {
         AlertDialog(
-            onDismissRequest = { showImportJsonDialog = false },
-            title = { Text("Impor Cadangan JSON") },
+            onDismissRequest = { showImportDialog = false },
+            shape = RoundedCornerShape(28.dp),
+            containerColor = glass.glassSurfaceElevated,
+            title = {
+                Text(
+                    text = "Impor Cadangan JSON",
+                    fontWeight = FontWeight.Bold,
+                    color = glass.textPrimary
+                )
+            },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Tempelkan data JSON cadangan SkinCare Daily untuk memulihkan tugas, riwayat, dan pengaturan:",
-                        style = MaterialTheme.typography.bodySmall
+                        text = "Tempelkan teks JSON cadangan Anda di bawah ini:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = glass.textSecondary
                     )
                     OutlinedTextField(
-                        value = jsonInput,
-                        onValueChange = { jsonInput = it },
-                        placeholder = { Text("{ \"schemaVersion\": 3, ... }") },
-                        maxLines = 10,
+                        value = importJsonInput,
+                        onValueChange = { importJsonInput = it },
+                        placeholder = { Text("{\"version\":2,...}") },
+                        maxLines = 8,
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("import_json_input_field")
+                            .testTag("import_json_textfield")
                     )
                 }
             },
             confirmButton = {
-                Button(
+                LiquidPrimaryActionButton(
+                    text = "Pulihkan Data",
                     onClick = {
-                        if (jsonInput.isNotBlank()) {
-                            onImportJson(jsonInput)
-                            showImportJsonDialog = false
+                        if (importJsonInput.isNotBlank()) {
+                            onImportJson(importJsonInput)
                         }
+                        showImportDialog = false
                     },
                     modifier = Modifier.testTag("confirm_import_json_button")
-                ) {
-                    Text("Impor Sekarang")
-                }
+                )
             },
             dismissButton = {
-                TextButton(onClick = { showImportJsonDialog = false }) {
-                    Text("Batal")
+                TextButton(onClick = { showImportDialog = false }) {
+                    Text("Batal", color = glass.textSecondary)
+                }
+            }
+        )
+    }
+
+    // Confirm Reset Default Prescription Dialog
+    if (showConfirmResetDefault) {
+        AlertDialog(
+            onDismissRequest = { showConfirmResetDefault = false },
+            shape = RoundedCornerShape(28.dp),
+            containerColor = glass.glassSurfaceElevated,
+            title = {
+                Text(
+                    text = "Kembalikan ke Resep Dokter Awal?",
+                    fontWeight = FontWeight.Bold,
+                    color = glass.textPrimary
+                )
+            },
+            text = {
+                Text(
+                    text = "Tindakan ini akan mengembalikan langkah rutinitas sesuai resep dokter (Labore AcnePro, Moisturizer, Bioderma Kerato+, Sunscreen Labore, Pharmalene Gel Sen/Rab/Jum, Serum Labore Sel/Kam/Sab/Min).",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = glass.textSecondary
+                )
+            },
+            confirmButton = {
+                LiquidPrimaryActionButton(
+                    text = "Ya, Kembalikan",
+                    onClick = {
+                        showConfirmResetDefault = false
+                        onRestoreDermatologistDefaultRoutine()
+                    },
+                    modifier = Modifier.testTag("confirm_reset_default_button")
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmResetDefault = false }) {
+                    Text("Batal", color = glass.textSecondary)
+                }
+            }
+        )
+    }
+
+    // Add / Edit Task Dialog
+    if (showEditorDialog) {
+        TaskEditorDialog(
+            initialTask = editingTask,
+            onDismiss = { showEditorDialog = false },
+            onSave = { periodStr, title, product, instruction, mins, isOptional, isActive, category, daysCsv, amount, area ->
+                showEditorDialog = false
+                val currentEditing = editingTask
+                if (currentEditing == null) {
+                    onAddCustomTask(
+                        RoutinePeriod.fromId(periodStr),
+                        title,
+                        product,
+                        instruction,
+                        mins,
+                        isOptional,
+                        category,
+                        daysCsv,
+                        amount,
+                        area
+                    )
+                } else {
+                    onUpdateTask(
+                        currentEditing,
+                        title,
+                        product,
+                        instruction,
+                        mins,
+                        isOptional,
+                        isActive,
+                        category,
+                        daysCsv,
+                        amount,
+                        area
+                    )
                 }
             }
         )
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun RoutineEditorTaskRow(
+private fun EditableTaskRow(
     task: RoutineTaskEntity,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
+    onToggleActive: (Boolean) -> Unit,
     onEdit: () -> Unit,
-    onRetire: () -> Unit
+    switchColors: androidx.compose.material3.SwitchColors
 ) {
-    val category = ProductCategory.fromId(task.category)
-    val dayScheduleLabel = RoutineScheduleHelper.formatScheduledDaysLabel(task.scheduledDaysCsv, task.period)
+    val glass = LiquidGlassTokens.colors
+    val categoryLabel = ProductCategory.fromId(task.category).labelIndonesian
+    val scheduleText = RoutineScheduleHelper.formatScheduledDaysLabel(task.scheduledDaysCsv, task.period)
 
-    Card(
+    Surface(
+        color = glass.glassSurfaceSecondary,
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, glass.glassBorderSubtle),
         modifier = Modifier
             .fillMaxWidth()
-            .testTag("editor_task_card_${task.id}"),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            .testTag("editor_task_row_${task.id}")
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Surface(
-                        color = if (task.period == RoutinePeriod.MORNING.id) {
-                            MaterialTheme.colorScheme.tertiaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.secondaryContainer
-                        },
-                        shape = MaterialTheme.shapes.extraSmall
-                    ) {
-                        Text(
-                            text = if (task.period == RoutinePeriod.MORNING.id) "Pagi #${task.sortOrder}" else "Malam #${task.sortOrder}",
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                    ProductCategoryBadge(category = category)
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        shape = MaterialTheme.shapes.extraSmall
-                    ) {
-                        Text(
-                            text = dayScheduleLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                    if (task.confirmationNote.isNotBlank()) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.errorContainer,
-                            shape = MaterialTheme.shapes.extraSmall
-                        ) {
-                            Text(
-                                text = "Perlu konfirmasi ke dokter",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                }
+            ProductBottleGlyph(
+                productCategory = task.category,
+                isActiveHighlight = task.category == ProductCategory.PRESCRIPTION_TOPICAL.id,
+                size = 40.dp
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = task.title,
-                    style = MaterialTheme.typography.titleSmall
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = glass.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = task.productName,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = "$categoryLabel • $scheduleText",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = glass.accentPrimaryBlue
                 )
-                if (task.usageAmount.isNotBlank() || task.applicationArea.isNotBlank()) {
-                    Text(
-                        text = listOfNotNull(
-                            task.usageAmount.takeIf { it.isNotBlank() }?.let { "Jumlah: $it" },
-                            task.applicationArea.takeIf { it.isNotBlank() }?.let { "Area: $it" }
-                        ).joinToString(" • "),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                Text(
+                    text = "Takaran: ${task.usageAmount} | Area: ${task.applicationArea}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = glass.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (task.confirmationNote.isNotBlank()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Outlined.WarningAmber,
+                            contentDescription = null,
+                            tint = glass.warningAmber,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = RoutineScheduleHelper.NEEDS_DOCTOR_CONFIRMATION,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = glass.warningAmber
+                        )
+                    }
                 }
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
                     onClick = onMoveUp,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .testTag("move_up_${task.id}")
+                    enabled = canMoveUp,
+                    modifier = Modifier.testTag("move_up_${task.id}")
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.ArrowUpward,
                         contentDescription = "Geser ke atas",
+                        tint = if (canMoveUp) glass.textPrimary else glass.textMuted,
                         modifier = Modifier.size(18.dp)
                     )
                 }
                 IconButton(
                     onClick = onMoveDown,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .testTag("move_down_${task.id}")
+                    enabled = canMoveDown,
+                    modifier = Modifier.testTag("move_down_${task.id}")
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.ArrowDownward,
                         contentDescription = "Geser ke bawah",
+                        tint = if (canMoveDown) glass.textPrimary else glass.textMuted,
                         modifier = Modifier.size(18.dp)
                     )
                 }
                 IconButton(
                     onClick = onEdit,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .testTag("edit_task_${task.id}")
+                    modifier = Modifier.testTag("edit_task_${task.id}")
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Edit,
                         contentDescription = "Ubah langkah",
+                        tint = glass.accentPrimaryBlue,
                         modifier = Modifier.size(18.dp)
                     )
                 }
-                IconButton(
-                    onClick = onRetire,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .testTag("retire_task_${task.id}")
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.DeleteOutline,
-                        contentDescription = "Nonaktifkan langkah",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                Switch(
+                    checked = task.isActive,
+                    onCheckedChange = onToggleActive,
+                    colors = switchColors,
+                    modifier = Modifier.testTag("active_switch_${task.id}")
+                )
             }
         }
     }
-}
-
-private fun parseDaysCsv(csv: String): Set<DayOfWeek> {
-    if (csv.isBlank()) return DayOfWeek.entries.toSet()
-    val parsed = csv.split(",")
-        .mapNotNull { it.trim().toIntOrNull() }
-        .mapNotNull { num -> runCatching { DayOfWeek.of(num) }.getOrNull() }
-        .toSet()
-    return if (parsed.isEmpty()) DayOfWeek.entries.toSet() else parsed
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -806,36 +776,45 @@ private fun TaskEditorDialog(
     initialTask: RoutineTaskEntity?,
     onDismiss: () -> Unit,
     onSave: (
-        period: RoutinePeriod,
+        period: String,
         title: String,
         productName: String,
         instruction: String,
         estimatedMinutes: Int,
         isOptional: Boolean,
+        isActive: Boolean,
         category: String,
         scheduledDaysCsv: String,
         usageAmount: String,
         applicationArea: String
     ) -> Unit
 ) {
-    var period by rememberSaveable {
-        mutableStateOf(
-            if (initialTask != null) RoutinePeriod.fromId(initialTask.period) else RoutinePeriod.MORNING
-        )
-    }
+    val glass = LiquidGlassTokens.colors
+    var period by rememberSaveable { mutableStateOf(initialTask?.period ?: RoutinePeriod.MORNING.id) }
     var title by rememberSaveable { mutableStateOf(initialTask?.title ?: "") }
     var productName by rememberSaveable { mutableStateOf(initialTask?.productName ?: "") }
     var instruction by rememberSaveable { mutableStateOf(initialTask?.instruction ?: "") }
-    var estimatedMinutes by rememberSaveable {
+    var estimatedMinsInput by rememberSaveable {
         mutableStateOf((initialTask?.estimatedMinutes ?: 2).toString())
     }
     var isOptional by rememberSaveable { mutableStateOf(initialTask?.isOptional ?: false) }
-    var categoryId by rememberSaveable {
+    var isActive by rememberSaveable { mutableStateOf(initialTask?.isActive ?: true) }
+    var category by rememberSaveable {
         mutableStateOf(initialTask?.category ?: ProductCategory.SUPPORTIVE_SKINCARE.id)
     }
-    var selectedDaysSet by remember {
-        mutableStateOf(parseDaysCsv(initialTask?.scheduledDaysCsv ?: ""))
-    }
+
+    val initialDaysSet: Set<Int> = (initialTask?.scheduledDaysCsv ?: "1,2,3,4,5,6,7")
+        .split(",")
+        .mapNotNull { it.trim().toIntOrNull() }
+        .toSet()
+    var day1 by rememberSaveable { mutableStateOf(1 in initialDaysSet) }
+    var day2 by rememberSaveable { mutableStateOf(2 in initialDaysSet) }
+    var day3 by rememberSaveable { mutableStateOf(3 in initialDaysSet) }
+    var day4 by rememberSaveable { mutableStateOf(4 in initialDaysSet) }
+    var day5 by rememberSaveable { mutableStateOf(5 in initialDaysSet) }
+    var day6 by rememberSaveable { mutableStateOf(6 in initialDaysSet) }
+    var day7 by rememberSaveable { mutableStateOf(7 in initialDaysSet) }
+
     var usageAmount by rememberSaveable {
         mutableStateOf(initialTask?.usageAmount ?: RoutineScheduleHelper.NEEDS_DOCTOR_CONFIRMATION)
     }
@@ -845,34 +824,59 @@ private fun TaskEditorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(28.dp),
+        containerColor = glass.glassSurfaceElevated,
         title = {
-            Text(if (initialTask == null) "Tambah Langkah Resep / Skincare" else "Ubah Langkah Resep / Skincare")
+            Text(
+                text = if (initialTask == null) "Tambah Langkah Baru" else "Edit Langkah Resep",
+                fontWeight = FontWeight.Bold,
+                color = glass.textPrimary
+            )
         },
         text = {
             Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                if (initialTask == null) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        RoutinePeriod.entries.forEach { p ->
-                            FilterChip(
-                                selected = period == p,
-                                onClick = { period = p },
-                                label = { Text("Rutinitas ${p.labelId}") },
-                                modifier = Modifier.testTag("task_dialog_period_${p.id}")
-                            )
-                        }
-                    }
+                Surface(
+                    color = glass.warningSoftBg,
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, glass.warningAmber.copy(alpha = 0.4f))
+                ) {
+                    Text(
+                        text = RoutineScheduleHelper.CHEMICAL_PEELING_WARNING,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = glass.warningAmber,
+                        modifier = Modifier.padding(10.dp)
+                    )
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = period == RoutinePeriod.MORNING.id,
+                        onClick = { period = RoutinePeriod.MORNING.id },
+                        label = { Text("Pagi") },
+                        modifier = Modifier.testTag("editor_period_morning_chip")
+                    )
+                    FilterChip(
+                        selected = period == RoutinePeriod.EVENING.id,
+                        onClick = { period = RoutinePeriod.EVENING.id },
+                        label = { Text("Malam") },
+                        modifier = Modifier.testTag("editor_period_evening_chip")
+                    )
                 }
 
                 Text(
-                    text = "Kategori Produk (Rule 8):",
-                    style = MaterialTheme.typography.labelMedium
+                    text = "Kategori Produk (Aturan 8):",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = glass.textPrimary
                 )
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     listOf(
                         ProductCategory.PRESCRIPTION_TOPICAL,
@@ -880,46 +884,10 @@ private fun TaskEditorDialog(
                         ProductCategory.SUNSCREEN
                     ).forEach { cat ->
                         FilterChip(
-                            selected = categoryId == cat.id,
-                            onClick = { categoryId = cat.id },
+                            selected = category == cat.id,
+                            onClick = { category = cat.id },
                             label = { Text(cat.labelIndonesian) },
-                            modifier = Modifier.testTag("task_dialog_cat_${cat.id}")
-                        )
-                    }
-                }
-
-                Text(
-                    text = "Jadwal Hari Pemakaian (Rule 2):",
-                    style = MaterialTheme.typography.labelMedium
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    val dayShortLabels = listOf(
-                        DayOfWeek.MONDAY to "Sen",
-                        DayOfWeek.TUESDAY to "Sel",
-                        DayOfWeek.WEDNESDAY to "Rab",
-                        DayOfWeek.THURSDAY to "Kam",
-                        DayOfWeek.FRIDAY to "Jum",
-                        DayOfWeek.SATURDAY to "Sab",
-                        DayOfWeek.SUNDAY to "Min"
-                    )
-                    dayShortLabels.forEach { (dow, shortLabel) ->
-                        val selected = dow in selectedDaysSet
-                        FilterChip(
-                            selected = selected,
-                            onClick = {
-                                val next = selectedDaysSet.toMutableSet()
-                                if (selected && next.size > 1) {
-                                    next.remove(dow)
-                                } else {
-                                    next.add(dow)
-                                }
-                                selectedDaysSet = next
-                            },
-                            label = { Text(shortLabel) },
-                            modifier = Modifier.testTag("task_dialog_day_${dow.value}")
+                            modifier = Modifier.testTag("editor_category_${cat.id.lowercase()}")
                         )
                     }
                 }
@@ -927,107 +895,154 @@ private fun TaskEditorDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Nama Langkah") },
+                    label = { Text("Judul Langkah") },
                     singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("task_dialog_title_input")
+                        .testTag("editor_title_input")
                 )
 
                 OutlinedTextField(
                     value = productName,
                     onValueChange = { productName = it },
-                    label = { Text("Nama Produk Sesuai Resep") },
+                    label = { Text("Nama Produk Resep") },
                     singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("task_dialog_product_input")
-                )
-
-                OutlinedTextField(
-                    value = usageAmount,
-                    onValueChange = { usageAmount = it },
-                    label = { Text("Jumlah Pemakaian (atau Perlu konfirmasi ke dokter)") },
-                    placeholder = { Text("Mis. Tipis sebanyak 1 biji jagung") },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("task_dialog_usage_input")
-                )
-
-                OutlinedTextField(
-                    value = applicationArea,
-                    onValueChange = { applicationArea = it },
-                    label = { Text("Area Aplikasi (atau Perlu konfirmasi ke dokter)") },
-                    placeholder = { Text("Mis. Seluruh wajah") },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("task_dialog_area_input")
+                        .testTag("editor_product_input")
                 )
 
                 OutlinedTextField(
                     value = instruction,
                     onValueChange = { instruction = it },
-                    label = { Text("Instruksi Dokter") },
-                    maxLines = 3,
+                    label = { Text("Instruksi Resep Dokter") },
+                    maxLines = 4,
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("task_dialog_instruction_input")
+                        .testTag("editor_instructions_input")
+                )
+
+                Text(
+                    text = "Jadwal Hari Pemakaian (Aturan 2):",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = glass.textPrimary
+                )
+                val dayItems = listOf(
+                    Triple(1, "Sen", day1) to { v: Boolean -> day1 = v },
+                    Triple(2, "Sel", day2) to { v: Boolean -> day2 = v },
+                    Triple(3, "Rab", day3) to { v: Boolean -> day3 = v },
+                    Triple(4, "Kam", day4) to { v: Boolean -> day4 = v },
+                    Triple(5, "Jum", day5) to { v: Boolean -> day5 = v },
+                    Triple(6, "Sab", day6) to { v: Boolean -> day6 = v },
+                    Triple(7, "Min", day7) to { v: Boolean -> day7 = v }
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    dayItems.forEach { (triple, setter) ->
+                        val (dayNum, label, selected) = triple
+                        FilterChip(
+                            selected = selected,
+                            onClick = { setter(!selected) },
+                            label = { Text(label) },
+                            modifier = Modifier.testTag("editor_day_chip_$dayNum")
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = usageAmount,
+                    onValueChange = { usageAmount = it },
+                    label = { Text("Jumlah Pemakaian (Tulis 'Perlu konfirmasi ke dokter' bila belum jelas)") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("editor_usage_amount_input")
                 )
 
                 OutlinedTextField(
-                    value = estimatedMinutes,
-                    onValueChange = { estimatedMinutes = it.filter { ch -> ch.isDigit() } },
-                    label = { Text("Estimasi Durasi Langkah (Menit)") },
+                    value = applicationArea,
+                    onValueChange = { applicationArea = it },
+                    label = { Text("Area Aplikasi (Tulis 'Perlu konfirmasi ke dokter' bila belum jelas)") },
                     singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("task_dialog_minutes_input")
+                        .testTag("editor_application_area_input")
+                )
+
+                OutlinedTextField(
+                    value = estimatedMinsInput,
+                    onValueChange = { estimatedMinsInput = it.filter { ch -> ch.isDigit() } },
+                    label = { Text("Estimasi Durasi / Jeda (Menit)") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("editor_wait_seconds_input")
                 )
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(
-                        checked = isOptional,
-                        onCheckedChange = { isOptional = it },
-                        modifier = Modifier.testTag("task_dialog_optional_checkbox")
+                        checked = !isOptional,
+                        onCheckedChange = { isOptional = !it },
+                        colors = CheckboxDefaults.colors(checkedColor = glass.accentPrimaryBlue),
+                        modifier = Modifier.testTag("editor_required_checkbox")
                     )
                     Text(
-                        text = "Langkah Opsional / Perlu Konfirmasi (tidak mengurangi persentase wajib bila belum dicentang)",
-                        style = MaterialTheme.typography.bodySmall
+                        text = "Langkah wajib (dihitung dalam progres harian)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = glass.textPrimary
                     )
                 }
             }
         },
         confirmButton = {
-            Button(
+            LiquidPrimaryActionButton(
+                text = "Simpan",
                 onClick = {
-                    if (title.isNotBlank() && productName.isNotBlank()) {
-                        val mins = estimatedMinutes.toIntOrNull()?.coerceIn(1, 30) ?: 2
-                        val daysCsv = selectedDaysSet.map { it.value }.sorted().joinToString(",")
+                    if (title.isNotBlank()) {
+                        val selectedDays = buildList {
+                            if (day1) add(1)
+                            if (day2) add(2)
+                            if (day3) add(3)
+                            if (day4) add(4)
+                            if (day5) add(5)
+                            if (day6) add(6)
+                            if (day7) add(7)
+                        }
+                        val daysCsv = if (selectedDays.isEmpty() || selectedDays.size == 7) {
+                            "1,2,3,4,5,6,7"
+                        } else {
+                            selectedDays.joinToString(",")
+                        }
                         onSave(
                             period,
-                            title,
-                            productName,
-                            instruction.ifBlank { "Gunakan sesuai instruksi resep dokter." },
-                            mins,
+                            title.trim(),
+                            productName.trim().ifBlank { title.trim() },
+                            instruction.trim(),
+                            estimatedMinsInput.toIntOrNull() ?: 2,
                             isOptional,
-                            categoryId,
+                            isActive,
+                            category,
                             daysCsv,
                             usageAmount.trim().ifBlank { RoutineScheduleHelper.NEEDS_DOCTOR_CONFIRMATION },
                             applicationArea.trim().ifBlank { RoutineScheduleHelper.NEEDS_DOCTOR_CONFIRMATION }
                         )
                     }
                 },
-                enabled = title.isNotBlank() && productName.isNotBlank(),
-                modifier = Modifier.testTag("task_dialog_save_button")
-            ) {
-                Text("Simpan")
-            }
+                modifier = Modifier.testTag("editor_save_task_button")
+            )
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Batal")
+                Text("Batal", color = glass.textSecondary)
             }
         }
     )

@@ -5,31 +5,38 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Alarm
+import androidx.compose.material.icons.outlined.Bedtime
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.MedicalServices
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.NotificationsOff
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.WbSunny
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +44,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -46,13 +54,22 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.domain.RoutineScheduleHelper
 import com.example.ui.SkinCareUiState
+import com.example.ui.components.LiquidGlassPill
+import com.example.ui.components.LiquidGlassSurface
+import com.example.ui.components.LiquidPrimaryActionButton
+import com.example.ui.components.LiquidSecondaryGlassButton
 import com.example.ui.components.TimePickerModalDialog
+import com.example.ui.theme.LiquidGlassTokens
 
 private enum class ActiveTimePickerTarget {
     NONE,
@@ -80,6 +97,7 @@ fun ReminderSettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val glass = LiquidGlassTokens.colors
     val settings = uiState.settings
     var activePicker by rememberSaveable { mutableStateOf(ActiveTimePickerTarget.NONE) }
 
@@ -126,66 +144,92 @@ fun ReminderSettingsScreen(
         mutableIntStateOf(settings.doctorControlMinute)
     }
 
+    val liquidSwitchColors = SwitchDefaults.colors(
+        checkedThumbColor = Color.White,
+        checkedTrackColor = glass.accentElectricCyan,
+        uncheckedThumbColor = glass.textSecondary,
+        uncheckedTrackColor = glass.glassSurfaceSecondary,
+        uncheckedBorderColor = glass.glassBorderSubtle
+    )
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
             .testTag("reminder_settings_list"),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 112.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item(key = "title") {
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "Pengaturan Pengingat & Jadwal Resep",
+                    text = "Pengaturan Pengingat",
                     style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onBackground
+                    fontWeight = FontWeight.ExtraBold,
+                    color = glass.textPrimary
                 )
                 Text(
-                    text = "Kelola alarm rutinitas pagi, malam, tabir surya (20 menit sebelum keluar & 2–3 jam), Doxihat 100 mg, dan kontrol 2 minggu.",
+                    text = "Kelola alarm rutinitas pagi, malam, tabir surya, Doxihat 100 mg, dan kontrol 2 minggu.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = glass.textSecondary
                 )
             }
         }
 
-        // 1. Permission & System Status Card
+        // 1. Permission & System Status Glass Card
         item(key = "permission_status_card") {
-            Card(
+            LiquidGlassSurface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("permission_status_card"),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                cornerRadius = 26.dp,
+                isElevated = true,
+                contentPadding = PaddingValues(16.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = if (uiState.hasNotificationPermission) {
-                                    Icons.Outlined.NotificationsActive
-                                } else {
-                                    Icons.Outlined.NotificationsOff
-                                },
-                                contentDescription = null,
-                                tint = if (uiState.hasNotificationPermission) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.error
-                                },
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(
+                                        if (uiState.hasNotificationPermission) {
+                                            glass.successSoftBg
+                                        } else {
+                                            glass.dangerSoftBg
+                                        }
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (uiState.hasNotificationPermission) {
+                                        Icons.Outlined.NotificationsActive
+                                    } else {
+                                        Icons.Outlined.NotificationsOff
+                                    },
+                                    contentDescription = null,
+                                    tint = if (uiState.hasNotificationPermission) {
+                                        glass.successMint
+                                    } else {
+                                        glass.dangerCoral
+                                    },
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
                                     text = "Status Izin Notifikasi",
-                                    style = MaterialTheme.typography.titleSmall
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = glass.textPrimary
                                 )
                                 Text(
                                     text = if (uiState.hasNotificationPermission) {
@@ -195,13 +239,30 @@ fun ReminderSettingsScreen(
                                     },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = if (uiState.hasNotificationPermission) {
-                                        MaterialTheme.colorScheme.primary
+                                        glass.successMint
                                     } else {
-                                        MaterialTheme.colorScheme.error
+                                        glass.dangerCoral
                                     },
                                     modifier = Modifier.testTag("notif_permission_status_text")
                                 )
                             }
+                        }
+
+                        if (uiState.hasNotificationPermission) {
+                            LiquidGlassPill(
+                                text = "Aktif",
+                                containerColor = glass.successSoftBg,
+                                contentColor = glass.successMint,
+                                borderColor = glass.successMint.copy(alpha = 0.4f),
+                                icon = {
+                                    Icon(
+                                        imageVector = Icons.Outlined.CheckCircle,
+                                        contentDescription = null,
+                                        tint = glass.successMint,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            )
                         }
                     }
 
@@ -210,17 +271,17 @@ fun ReminderSettingsScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         if (!uiState.hasNotificationPermission && !settings.notificationPermissionAskedOnce) {
-                            Button(
+                            LiquidPrimaryActionButton(
+                                text = "Minta Izin Notifikasi",
                                 onClick = onRequestNotificationPermission,
                                 modifier = Modifier
                                     .weight(1f)
                                     .testTag("request_notif_permission_button")
-                            ) {
-                                Text("Minta Izin Notifikasi")
-                            }
+                            )
                         }
 
-                        OutlinedButton(
+                        LiquidSecondaryGlassButton(
+                            text = "Pengaturan Sistem",
                             onClick = {
                                 val intent = Intent().apply {
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -234,149 +295,252 @@ fun ReminderSettingsScreen(
                                 }
                                 runCatching { context.startActivity(intent) }
                             },
+                            leadingIcon = Icons.Outlined.Settings,
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("open_system_notif_settings_button")
-                        ) {
-                            Text("Pengaturan Sistem")
-                        }
+                        )
                     }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        FilledTonalButton(
+                        LiquidSecondaryGlassButton(
+                            text = "Uji Notifikasi",
                             onClick = onTriggerTestNotification,
+                            leadingIcon = Icons.Outlined.NotificationsActive,
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("test_notification_button")
-                        ) {
-                            Text("Uji Notifikasi")
-                        }
+                        )
 
-                        OutlinedButton(
+                        LiquidSecondaryGlassButton(
+                            text = "Jadwalkan Ulang",
                             onClick = onRescheduleAllReminders,
+                            leadingIcon = Icons.Outlined.Refresh,
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("reschedule_reminders_button")
-                        ) {
-                            Text("Jadwalkan ulang pengingat")
-                        }
+                        )
                     }
                 }
             }
         }
 
-        // 2. Main Morning & Evening Routine Reminders
+        // 2. Main Morning & Evening Routine Reminders + Weekly Schedule Panel
         item(key = "main_routine_reminders") {
-            Card(
+            LiquidGlassSurface(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                cornerRadius = 26.dp,
+                isElevated = true,
+                contentPadding = PaddingValues(16.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Text(
                         text = "Pengingat Utama Harian",
-                        style = MaterialTheme.typography.titleMedium
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = glass.textPrimary
                     )
 
-                    // Morning Routine
+                    // Morning Routine Row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Rutinitas Pagi",
-                                style = MaterialTheme.typography.titleSmall
-                            )
-                            Text(
-                                text = "Urutan: Pembersih Labore AcnePro, Moisturizer, Bioderma Kerato+, Sunscreen",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(glass.accentSoftGlow),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.WbSunny,
+                                    contentDescription = null,
+                                    tint = glass.accentPrimaryBlue,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Rutinitas Pagi",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = glass.textPrimary
+                                )
+                                Text(
+                                    text = "Pembersih, Moisturizer, Kerato+, Sunscreen",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = glass.textSecondary
+                                )
+                            }
                         }
-                        OutlinedButton(
+                        Spacer(modifier = Modifier.width(8.dp))
+                        LiquidTimePillButton(
+                            timeText = RoutineScheduleHelper.formatTimeHm(settings.morningHour, settings.morningMinute),
                             onClick = { activePicker = ActiveTimePickerTarget.MORNING_MAIN },
                             modifier = Modifier.testTag("morning_time_picker_button")
-                        ) {
-                            Text(RoutineScheduleHelper.formatTimeHm(settings.morningHour, settings.morningMinute))
-                        }
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
                         Switch(
                             checked = settings.morningReminderEnabled,
                             onCheckedChange = { enabled ->
                                 onUpdateMorningReminder(enabled, settings.morningHour, settings.morningMinute)
                             },
+                            colors = liquidSwitchColors,
                             modifier = Modifier.testTag("morning_reminder_switch")
                         )
                     }
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    HorizontalDivider(color = glass.glassBorderSubtle)
 
-                    // Evening Routine
+                    // Evening Routine Row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Rutinitas Malam",
-                                style = MaterialTheme.typography.titleSmall
-                            )
-                            Text(
-                                text = "Menyesuaikan hari: Pharmalene Gel (Sen/Rab/Jum) atau Serum Labore",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(glass.accentSoftGlow),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Bedtime,
+                                    contentDescription = null,
+                                    tint = glass.accentElectricCyan,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Rutinitas Malam",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = glass.textPrimary
+                                )
+                                Text(
+                                    text = "Menyesuaikan hari: Pharmalene Gel / Serum Labore",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = glass.textSecondary
+                                )
+                            }
                         }
-                        OutlinedButton(
+                        Spacer(modifier = Modifier.width(8.dp))
+                        LiquidTimePillButton(
+                            timeText = RoutineScheduleHelper.formatTimeHm(settings.eveningHour, settings.eveningMinute),
                             onClick = { activePicker = ActiveTimePickerTarget.EVENING_MAIN },
                             modifier = Modifier.testTag("evening_time_picker_button")
-                        ) {
-                            Text(RoutineScheduleHelper.formatTimeHm(settings.eveningHour, settings.eveningMinute))
-                        }
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
                         Switch(
                             checked = settings.eveningReminderEnabled,
                             onCheckedChange = { enabled ->
                                 onUpdateEveningReminder(enabled, settings.eveningHour, settings.eveningMinute)
                             },
+                            colors = liquidSwitchColors,
                             modifier = Modifier.testTag("evening_reminder_switch")
                         )
                     }
 
-                    // Weekly Evening Active Product Reference Table
+                    // Weekly Evening Active Product Reference Panel (Mon–Sun capsules + details)
                     Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        shape = MaterialTheme.shapes.small
+                        color = glass.glassSurfaceSecondary,
+                        shape = RoundedCornerShape(18.dp),
+                        border = BorderStroke(1.dp, glass.glassBorderSubtle)
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Text(
-                                text = "Jadwal Obat Oles & Serum Malam (Resep Dokter):",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary
+                                text = "Jadwal Produk Aktif Malam (Resep Dokter)",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = glass.accentPrimaryBlue
                             )
+
+                            val days = listOf(
+                                Triple(1, "Sen", "Pharmalene"),
+                                Triple(2, "Sel", "Serum"),
+                                Triple(3, "Rab", "Pharmalene"),
+                                Triple(4, "Kam", "Serum"),
+                                Triple(5, "Jum", "Pharmalene"),
+                                Triple(6, "Sab", "Serum"),
+                                Triple(7, "Min", "Serum")
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                days.forEach { (isoDay, dayLabel, shortTag) ->
+                                    val isPharmalene = isoDay in setOf(1, 3, 5)
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(
+                                                if (isPharmalene) {
+                                                    Brush.verticalGradient(
+                                                        listOf(glass.accentPrimaryBlue, glass.accentElectricCyan)
+                                                    )
+                                                } else {
+                                                    Brush.verticalGradient(
+                                                        listOf(glass.glassSurfaceElevated, glass.glassSurfacePrimary)
+                                                    )
+                                                }
+                                            )
+                                            .border(
+                                                width = 1.dp,
+                                                color = if (isPharmalene) Color.White.copy(alpha = 0.45f) else glass.glassBorderSubtle,
+                                                shape = RoundedCornerShape(12.dp)
+                                            )
+                                            .padding(vertical = 8.dp, horizontal = 2.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        Text(
+                                            text = dayLabel,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isPharmalene) Color.White else glass.textPrimary
+                                        )
+                                        Text(
+                                            text = shortTag,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (isPharmalene) Color.White.copy(alpha = 0.9f) else glass.textSecondary,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                            }
+
                             Text(
                                 text = "• Senin, Rabu, Jumat: Pharmalene Gel 10 g (tipis sebanyak 1 biji jagung seluruh wajah)",
-                                style = MaterialTheme.typography.bodySmall
+                                style = MaterialTheme.typography.bodySmall,
+                                color = glass.textSecondary
                             )
                             Text(
                                 text = "• Selasa, Kamis, Sabtu, Minggu: Labore AcnePro Biome Intensive Acne Serum 7 ml",
-                                style = MaterialTheme.typography.bodySmall
+                                style = MaterialTheme.typography.bodySmall,
+                                color = glass.textSecondary
                             )
                         }
                     }
@@ -384,24 +548,22 @@ fun ReminderSettingsScreen(
             }
         }
 
-        // 3. Sunscreen Reapplication Reminder (20 min before outdoor + every 2–3h)
+        // 3. Sunscreen Reapplication Reminder Glass Card (20 min before outdoor + every 2–3h)
         item(key = "sunscreen_reapplication_card") {
             val sched = uiState.sunscreenScheduleToday
             val preOutdoorHm = RoutineScheduleHelper.formatTimeHm(
                 sched.applyBeforeOutdoorTime.hour,
                 sched.applyBeforeOutdoorTime.minute
             )
-            Card(
+            LiquidGlassSurface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("sunscreen_settings_card"),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                cornerRadius = 26.dp,
+                isElevated = true,
+                contentPadding = PaddingValues(16.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -411,22 +573,32 @@ fun ReminderSettingsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.weight(1f)
                         ) {
-                            Icon(
-                                imageVector = Icons.Outlined.WbSunny,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.tertiary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(glass.accentSoftGlow),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.WbSunny,
+                                    contentDescription = null,
+                                    tint = glass.accentPrimaryBlue,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "Pengingat Sunscreen (Labore Biomeprotect)",
-                                    style = MaterialTheme.typography.titleMedium
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = glass.textPrimary
                                 )
                                 Text(
                                     text = "Oles 20 menit sebelum keluar rumah & aplikasikan ulang setiap 2–3 jam sesuai catatan dokter.",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = glass.textSecondary
                                 )
                             }
                         }
@@ -443,6 +615,7 @@ fun ReminderSettingsScreen(
                                     false
                                 )
                             },
+                            colors = liquidSwitchColors,
                             modifier = Modifier.testTag("sunscreen_enable_switch")
                         )
                     }
@@ -455,20 +628,21 @@ fun ReminderSettingsScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Waktu keluar rumah:",
-                                style = MaterialTheme.typography.bodyMedium
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = glass.textPrimary
                             )
                             Text(
                                 text = "Pengingat oles 20 menit sebelumnya: pukul $preOutdoorHm",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
+                                color = glass.accentPrimaryBlue
                             )
                         }
-                        OutlinedButton(
+                        LiquidTimePillButton(
+                            timeText = RoutineScheduleHelper.formatTimeHm(settings.sunscreenStartHour, settings.sunscreenStartMinute),
                             onClick = { activePicker = ActiveTimePickerTarget.SUNSCREEN_START },
                             modifier = Modifier.testTag("sunscreen_start_time_button")
-                        ) {
-                            Text(RoutineScheduleHelper.formatTimeHm(settings.sunscreenStartHour, settings.sunscreenStartMinute))
-                        }
+                        )
                     }
 
                     Row(
@@ -478,10 +652,13 @@ fun ReminderSettingsScreen(
                     ) {
                         Text(
                             text = "Interval oles ulang:",
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = glass.textPrimary
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(
+                            LiquidChoicePill(
+                                label = "Setiap 2 Jam",
                                 selected = settings.sunscreenIntervalHours == 2,
                                 onClick = {
                                     onConfigureSunscreenReminder(
@@ -493,10 +670,10 @@ fun ReminderSettingsScreen(
                                         settings.sunscreenPaused
                                     )
                                 },
-                                label = { Text("Setiap 2 Jam") },
                                 modifier = Modifier.testTag("sunscreen_interval_2h_chip")
                             )
-                            FilterChip(
+                            LiquidChoicePill(
+                                label = "Setiap 3 Jam",
                                 selected = settings.sunscreenIntervalHours == 3,
                                 onClick = {
                                     onConfigureSunscreenReminder(
@@ -508,7 +685,6 @@ fun ReminderSettingsScreen(
                                         settings.sunscreenPaused
                                     )
                                 },
-                                label = { Text("Setiap 3 Jam") },
                                 modifier = Modifier.testTag("sunscreen_interval_3h_chip")
                             )
                         }
@@ -519,7 +695,8 @@ fun ReminderSettingsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            FilledTonalButton(
+                            LiquidSecondaryGlassButton(
+                                text = if (settings.sunscreenPaused) "Lanjutkan Hari Ini" else "Jeda Sementara",
                                 onClick = {
                                     onConfigureSunscreenReminder(
                                         true,
@@ -533,10 +710,9 @@ fun ReminderSettingsScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .testTag("sunscreen_settings_pause_button")
-                            ) {
-                                Text(if (settings.sunscreenPaused) "Lanjutkan Hari Ini" else "Jeda Sementara")
-                            }
-                            OutlinedButton(
+                            )
+                            LiquidSecondaryGlassButton(
+                                text = "Hentikan",
                                 onClick = {
                                     onConfigureSunscreenReminder(
                                         false,
@@ -550,9 +726,7 @@ fun ReminderSettingsScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .testTag("sunscreen_settings_stop_button")
-                            ) {
-                                Text("Hentikan")
-                            }
+                            )
                         }
                     }
                 }
@@ -561,27 +735,31 @@ fun ReminderSettingsScreen(
 
         // 4. Snooze, Follow-Up, Per-Step Reminders, and Exact Alarm Option
         item(key = "advanced_reminder_options") {
-            Card(
+            LiquidGlassSurface(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                cornerRadius = 26.dp,
+                contentPadding = PaddingValues(16.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = "Opsi Tunda, Pengingat Lanjutan & Langkah",
-                        style = MaterialTheme.typography.titleMedium
+                        text = "Opsi Tunda & Pengingat Lanjutan",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = glass.textPrimary
                     )
 
                     Text(
                         text = "Durasi tombol \"Tunda\" pada notifikasi:",
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.bodySmall,
+                        color = glass.textSecondary
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         listOf(10, 15, 30).forEach { mins ->
-                            FilterChip(
+                            LiquidChoicePill(
+                                label = "$mins menit",
                                 selected = settings.snoozeDurationMinutes == mins,
                                 onClick = {
                                     onUpdateFollowUpAndSnooze(
@@ -591,13 +769,14 @@ fun ReminderSettingsScreen(
                                         settings.useExactAlarm
                                     )
                                 },
-                                label = { Text("$mins menit") },
-                                modifier = Modifier.testTag("snooze_chip_${mins}m")
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("snooze_chip_${mins}m")
                             )
                         }
                     }
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    HorizontalDivider(color = glass.glassBorderSubtle)
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -607,12 +786,14 @@ fun ReminderSettingsScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Pengingat Susulan (+${settings.followUpDelayMinutes} menit)",
-                                style = MaterialTheme.typography.titleSmall
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = glass.textPrimary
                             )
                             Text(
                                 text = "Mengingatkan satu kali lagi bila rutinitas belum dicentang",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = glass.textSecondary
                             )
                         }
                         Switch(
@@ -625,11 +806,12 @@ fun ReminderSettingsScreen(
                                     settings.useExactAlarm
                                 )
                             },
+                            colors = liquidSwitchColors,
                             modifier = Modifier.testTag("followup_reminder_switch")
                         )
                     }
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    HorizontalDivider(color = glass.glassBorderSubtle)
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -638,8 +820,10 @@ fun ReminderSettingsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Alarm tepat waktu (Opsional)",
-                                style = MaterialTheme.typography.titleSmall
+                                text = "Alarm Tepat Waktu (Opsional)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = glass.textPrimary
                             )
                             Text(
                                 text = if (uiState.canScheduleExactAlarms) {
@@ -648,7 +832,7 @@ fun ReminderSettingsScreen(
                                     "Akses 'Alarms & reminders' belum diizinkan; menggunakan jadwal hemat baterai (pengiriman dapat sedikit tertunda)."
                                 },
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = glass.textSecondary,
                                 modifier = Modifier.testTag("exact_alarm_status_text")
                             )
                         }
@@ -662,12 +846,14 @@ fun ReminderSettingsScreen(
                                     enabled
                                 )
                             },
+                            colors = liquidSwitchColors,
                             modifier = Modifier.testTag("exact_alarm_switch")
                         )
                     }
 
                     if (settings.useExactAlarm && !uiState.canScheduleExactAlarms && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        OutlinedButton(
+                        LiquidSecondaryGlassButton(
+                            text = "Buka Izin Alarms & Reminders Android",
                             onClick = {
                                 val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
                                     data = Uri.fromParts("package", context.packageName, null)
@@ -675,30 +861,25 @@ fun ReminderSettingsScreen(
                                 }
                                 runCatching { context.startActivity(intent) }
                             },
+                            leadingIcon = Icons.Outlined.Alarm,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("open_exact_alarm_settings_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Alarm,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Buka Izin Alarms & Reminders Android")
-                        }
+                        )
                     }
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    HorizontalDivider(color = glass.glassBorderSubtle)
 
                     Text(
                         text = "Pengingat Per Langkah (Opsional)",
-                        style = MaterialTheme.typography.titleSmall
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = glass.textPrimary
                     )
                     Text(
                         text = "Secara bawaan hanya 2 pengingat utama yang aktif agar tidak berlebihan. Anda dapat mengaktifkan pengingat khusus langkah tertentu di bawah ini:",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = glass.textSecondary
                     )
 
                     uiState.allTasksForEditor.filter { it.isActive }.forEach { task ->
@@ -713,12 +894,13 @@ fun ReminderSettingsScreen(
                                 Text(
                                     text = "${if (task.period == "MORNING") "[Pagi]" else "[Malam]"} ${task.title}",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium
+                                    fontWeight = FontWeight.Medium,
+                                    color = glass.textPrimary
                                 )
                                 Text(
                                     text = "+${task.reminderOffsetMinutes.coerceAtLeast(3)} menit setelah pengingat utama",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = glass.textSecondary
                                 )
                             }
                             Switch(
@@ -727,6 +909,7 @@ fun ReminderSettingsScreen(
                                     val offset = if (task.reminderOffsetMinutes <= 0) 3 else task.reminderOffsetMinutes
                                     onToggleStepReminder(task.id, enabled, offset)
                                 },
+                                colors = liquidSwitchColors,
                                 modifier = Modifier.testTag("step_reminder_switch_${task.id}")
                             )
                         }
@@ -737,41 +920,50 @@ fun ReminderSettingsScreen(
 
         // 5. ORAL MEDICATION REMINDER SECTION (Doxihat 100 mg — 2x sehari selama 2 minggu, tidak berulang otomatis)
         item(key = "medication_safety_card") {
-            Card(
+            LiquidGlassSurface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("medication_safety_card"),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                cornerRadius = 26.dp,
+                isElevated = true,
+                contentPadding = PaddingValues(16.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Outlined.MedicalServices,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.tertiary,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(glass.warningSoftBg),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.MedicalServices,
+                                contentDescription = null,
+                                tint = glass.warningAmber,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Pengingat Obat Minum: ${RoutineScheduleHelper.ORAL_MEDICATION_NAME}",
-                                style = MaterialTheme.typography.titleMedium
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = glass.textPrimary
                             )
                             Text(
                                 text = "Setelah makan pagi dan malam, 2x sehari selama 2 minggu (14 hari) sesuai resep dokter.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = glass.textSecondary
                             )
                         }
                     }
 
                     Surface(
-                        color = MaterialTheme.colorScheme.tertiaryContainer,
-                        shape = MaterialTheme.shapes.small
+                        color = glass.warningSoftBg,
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, glass.warningAmber.copy(alpha = 0.4f))
                     ) {
                         Row(
                             modifier = Modifier.padding(12.dp),
@@ -780,7 +972,7 @@ fun ReminderSettingsScreen(
                             Icon(
                                 imageVector = Icons.Outlined.WarningAmber,
                                 contentDescription = "Perhatian Resep",
-                                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                tint = glass.warningAmber,
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
@@ -788,12 +980,13 @@ fun ReminderSettingsScreen(
                                 Text(
                                     text = RoutineScheduleHelper.NEEDS_DOCTOR_CONFIRMATION,
                                     style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                    fontWeight = FontWeight.Bold,
+                                    color = glass.warningAmber
                                 )
                                 Text(
                                     text = RoutineScheduleHelper.ORAL_MEDICATION_DISCREPANCY_WARNING,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                    color = glass.textPrimary
                                 )
                             }
                         }
@@ -811,11 +1004,16 @@ fun ReminderSettingsScreen(
                                     medReminderSwitch = false
                                 }
                             },
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = glass.accentPrimaryBlue,
+                                checkmarkColor = Color.White
+                            ),
                             modifier = Modifier.testTag("medication_discrepancy_confirm_checkbox")
                         )
                         Text(
                             text = "Saya telah mengonfirmasi durasi 2 minggu (14 hari) & jumlah kapsul Doxihat 100 mg sesuai resep dokter.",
                             style = MaterialTheme.typography.bodySmall,
+                            color = glass.textPrimary,
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -826,6 +1024,7 @@ fun ReminderSettingsScreen(
                             onValueChange = { medStartDateInput = it },
                             label = { Text("Tanggal Mulai Terapi (YYYY-MM-DD)") },
                             singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("med_start_date_input")
@@ -840,6 +1039,7 @@ fun ReminderSettingsScreen(
                                 onValueChange = { medDurationDaysInput = it.filter { ch -> ch.isDigit() } },
                                 label = { Text("Durasi (Hari, Resep: 14)") },
                                 singleLine = true,
+                                shape = RoundedCornerShape(16.dp),
                                 modifier = Modifier
                                     .weight(1f)
                                     .testTag("med_duration_days_input")
@@ -849,6 +1049,7 @@ fun ReminderSettingsScreen(
                                 onValueChange = { medTotalCapsulesInput = it.filter { ch -> ch.isDigit() } },
                                 label = { Text("Jumlah Kapsul") },
                                 singleLine = true,
+                                shape = RoundedCornerShape(16.dp),
                                 modifier = Modifier
                                     .weight(1f)
                                     .testTag("med_total_capsules_input")
@@ -860,13 +1061,16 @@ fun ReminderSettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Setelah Makan Pagi:", style = MaterialTheme.typography.bodySmall)
-                            OutlinedButton(
+                            Text(
+                                text = "Setelah Makan Pagi:",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = glass.textSecondary
+                            )
+                            LiquidTimePillButton(
+                                timeText = RoutineScheduleHelper.formatTimeHm(medBreakfastH, medBreakfastM),
                                 onClick = { activePicker = ActiveTimePickerTarget.MED_BREAKFAST },
                                 modifier = Modifier.testTag("med_breakfast_time_button")
-                            ) {
-                                Text(RoutineScheduleHelper.formatTimeHm(medBreakfastH, medBreakfastM))
-                            }
+                            )
                         }
 
                         Row(
@@ -874,13 +1078,16 @@ fun ReminderSettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Setelah Makan Malam:", style = MaterialTheme.typography.bodySmall)
-                            OutlinedButton(
+                            Text(
+                                text = "Setelah Makan Malam:",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = glass.textSecondary
+                            )
+                            LiquidTimePillButton(
+                                timeText = RoutineScheduleHelper.formatTimeHm(medDinnerH, medDinnerM),
                                 onClick = { activePicker = ActiveTimePickerTarget.MED_DINNER },
                                 modifier = Modifier.testTag("med_dinner_time_button")
-                            ) {
-                                Text(RoutineScheduleHelper.formatTimeHm(medDinnerH, medDinnerM))
-                            }
+                            )
                         }
 
                         Row(
@@ -890,17 +1097,21 @@ fun ReminderSettingsScreen(
                         ) {
                             Text(
                                 text = "Aktifkan Alarm Pengingat Doxihat 100 mg",
-                                style = MaterialTheme.typography.titleSmall
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = glass.textPrimary
                             )
                             Switch(
                                 checked = medReminderSwitch,
                                 onCheckedChange = { medReminderSwitch = it },
+                                colors = liquidSwitchColors,
                                 modifier = Modifier.testTag("medication_reminder_enable_switch")
                             )
                         }
                     }
 
-                    Button(
+                    LiquidPrimaryActionButton(
+                        text = "Simpan Pengaturan Obat Minum",
                         onClick = {
                             val parsedDays = medDurationDaysInput.toIntOrNull()?.coerceIn(1, 30)
                                 ?: RoutineScheduleHelper.DEFAULT_MEDICATION_DURATION_DAYS
@@ -921,26 +1132,22 @@ fun ReminderSettingsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("save_medication_settings_button")
-                    ) {
-                        Text("Simpan Pengaturan Obat Minum")
-                    }
+                    )
                 }
             }
         }
 
         // 6. Rule 7: Two-Week Doctor Control Follow-up Reminder Card
         item(key = "doctor_control_reminder_card") {
-            Card(
+            LiquidGlassSurface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("doctor_control_settings_card"),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                cornerRadius = 26.dp,
+                isElevated = true,
+                contentPadding = PaddingValues(16.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -950,22 +1157,32 @@ fun ReminderSettingsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.weight(1f)
                         ) {
-                            Icon(
-                                imageVector = Icons.Outlined.CalendarMonth,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(glass.accentSoftGlow),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.CalendarMonth,
+                                    contentDescription = null,
+                                    tint = glass.accentPrimaryBlue,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "Pengingat Kontrol Dokter (2 Minggu)",
-                                    style = MaterialTheme.typography.titleMedium
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = glass.textPrimary
                                 )
                                 Text(
                                     text = RoutineScheduleHelper.DOCTOR_CONTROL_NOTE,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = glass.textSecondary
                                 )
                             }
                         }
@@ -973,6 +1190,7 @@ fun ReminderSettingsScreen(
                         Switch(
                             checked = controlEnabledSwitch,
                             onCheckedChange = { controlEnabledSwitch = it },
+                            colors = liquidSwitchColors,
                             modifier = Modifier.testTag("doctor_control_enable_switch")
                         )
                     }
@@ -982,6 +1200,7 @@ fun ReminderSettingsScreen(
                         onValueChange = { therapyStartDateInput = it },
                         label = { Text("Tanggal Mulai Terapi Resep (YYYY-MM-DD)") },
                         singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("therapy_start_date_input")
@@ -990,7 +1209,8 @@ fun ReminderSettingsScreen(
                     Text(
                         text = "Jadwal kontrol (+14 hari): ${uiState.doctorControlDateFormatted}",
                         style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
+                        fontWeight = FontWeight.Bold,
+                        color = glass.accentPrimaryBlue
                     )
 
                     Row(
@@ -998,16 +1218,20 @@ fun ReminderSettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Jam Pengingat Kontrol:", style = MaterialTheme.typography.bodySmall)
-                        OutlinedButton(
+                        Text(
+                            text = "Jam Pengingat Kontrol:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = glass.textSecondary
+                        )
+                        LiquidTimePillButton(
+                            timeText = RoutineScheduleHelper.formatTimeHm(controlHour, controlMinute),
                             onClick = { activePicker = ActiveTimePickerTarget.DOCTOR_CONTROL },
                             modifier = Modifier.testTag("doctor_control_time_button")
-                        ) {
-                            Text(RoutineScheduleHelper.formatTimeHm(controlHour, controlMinute))
-                        }
+                        )
                     }
 
-                    Button(
+                    LiquidPrimaryActionButton(
+                        text = "Simpan Pengingat Kontrol 2 Minggu",
                         onClick = {
                             onUpdateDoctorControlReminder(
                                 controlEnabledSwitch,
@@ -1020,9 +1244,7 @@ fun ReminderSettingsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("save_doctor_control_button")
-                    ) {
-                        Text("Simpan Pengingat Kontrol 2 Minggu")
-                    }
+                    )
                 }
             }
         }
@@ -1112,5 +1334,85 @@ fun ReminderSettingsScreen(
             )
         }
         ActiveTimePickerTarget.NONE -> Unit
+    }
+}
+
+@Composable
+private fun LiquidTimePillButton(
+    timeText: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val glass = LiquidGlassTokens.colors
+    Surface(
+        modifier = modifier
+            .height(40.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick),
+        color = glass.accentSoftGlow,
+        shape = CircleShape,
+        border = BorderStroke(1.dp, glass.accentElectricCyan.copy(alpha = 0.55f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Alarm,
+                contentDescription = null,
+                tint = glass.accentPrimaryBlue,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = timeText,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = glass.accentPrimaryBlue
+            )
+        }
+    }
+}
+
+@Composable
+private fun LiquidChoicePill(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val glass = LiquidGlassTokens.colors
+    Box(
+        modifier = modifier
+            .height(40.dp)
+            .clip(CircleShape)
+            .background(
+                if (selected) {
+                    Brush.horizontalGradient(
+                        listOf(glass.accentPrimaryBlue, glass.accentElectricCyan)
+                    )
+                } else {
+                    Brush.horizontalGradient(
+                        listOf(glass.glassSurfaceSecondary, glass.glassSurfacePrimary)
+                    )
+                }
+            )
+            .border(
+                width = 1.dp,
+                color = if (selected) Color.White.copy(alpha = 0.45f) else glass.glassBorderSubtle,
+                shape = CircleShape
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = if (selected) Color.White else glass.textSecondary,
+            textAlign = TextAlign.Center
+        )
     }
 }

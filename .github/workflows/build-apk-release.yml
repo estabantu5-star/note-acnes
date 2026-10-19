@@ -277,6 +277,20 @@ jobs:
           EOF
           fi
 
+          if [ ! -f "app/src/main/res/xml/file_paths.xml" ]; then
+            cat << 'EOF' > app/src/main/res/xml/file_paths.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <paths>
+              <cache-path name="apk_cache_updates" path="updates/" />
+              <cache-path name="apk_cache_root" path="." />
+              <files-path name="apk_files_updates" path="updates/" />
+              <files-path name="apk_files_root" path="." />
+              <external-files-path name="apk_external_files" path="." />
+              <external-cache-path name="apk_external_cache" path="." />
+          </paths>
+          EOF
+          fi
+
           mkdir -p app/src/main/res/drawable
           if [ ! -f "app/src/main/res/drawable/ic_launcher_background.xml" ]; then
             cat << 'EOF' > app/src/main/res/drawable/ic_launcher_background.xml
@@ -361,7 +375,11 @@ jobs:
 
       - name: Ensure debug.keystore exists
         run: |
-          if [ ! -f "debug.keystore" ]; then
+          if [ ! -f "debug.keystore" ] && [ -f "debug.keystore.base64" ]; then
+            base64 -d debug.keystore.base64 > debug.keystore || true
+          fi
+          if [ ! -s "debug.keystore" ]; then
+            rm -f debug.keystore
             keytool -genkeypair -v \
               -keystore debug.keystore \
               -storepass android \
@@ -379,6 +397,9 @@ jobs:
           gradle-version: '9.3.1'
 
       - name: Build Debug APK
+        env:
+          APP_VERSION_CODE: ${{ github.run_number }}
+          APP_VERSION_NAME: "1.0.${{ github.run_number }}"
         run: gradle :app:assembleDebug --no-daemon --no-configuration-cache --stacktrace
 
       - name: Prepare Release APK

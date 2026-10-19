@@ -83,7 +83,12 @@ data class UserReminderAndAppSettings(
     val doctorControlMinute: Int = 0,
 
     // Last schedule sync timestamp
-    val lastReminderSyncEpochMillis: Long = 0L
+    val lastReminderSyncEpochMillis: Long = 0L,
+
+    // App Updater (GitHub Releases) metadata
+    val lastUpdateCheckEpochMillis: Long = 0L,
+    val postponedUpdateVersionTag: String = "",
+    val cachedLatestVersionTag: String = ""
 )
 
 class UserPreferencesRepository(
@@ -135,6 +140,9 @@ class UserPreferencesRepository(
         val DOCTOR_CONTROL_MINUTE = intPreferencesKey("doctor_control_minute")
 
         val LAST_REMINDER_SYNC_MILLIS = longPreferencesKey("last_reminder_sync_millis")
+        val LAST_UPDATE_CHECK_MILLIS = longPreferencesKey("last_update_check_millis")
+        val POSTPONED_UPDATE_VERSION_TAG = stringPreferencesKey("postponed_update_version_tag")
+        val CACHED_LATEST_VERSION_TAG = stringPreferencesKey("cached_latest_version_tag")
     }
 
     val settingsFlow: Flow<UserReminderAndAppSettings> = dataStore.data
@@ -195,7 +203,10 @@ class UserPreferencesRepository(
                 ?: RoutineScheduleHelper.DEFAULT_DOCTOR_CONTROL_DAYS,
             doctorControlHour = prefs[Keys.DOCTOR_CONTROL_HOUR] ?: 9,
             doctorControlMinute = prefs[Keys.DOCTOR_CONTROL_MINUTE] ?: 0,
-            lastReminderSyncEpochMillis = prefs[Keys.LAST_REMINDER_SYNC_MILLIS] ?: 0L
+            lastReminderSyncEpochMillis = prefs[Keys.LAST_REMINDER_SYNC_MILLIS] ?: 0L,
+            lastUpdateCheckEpochMillis = prefs[Keys.LAST_UPDATE_CHECK_MILLIS] ?: 0L,
+            postponedUpdateVersionTag = prefs[Keys.POSTPONED_UPDATE_VERSION_TAG] ?: "",
+            cachedLatestVersionTag = prefs[Keys.CACHED_LATEST_VERSION_TAG] ?: ""
         )
     }
 
@@ -333,6 +344,24 @@ class UserPreferencesRepository(
     suspend fun recordReminderSyncTimestamp(epochMillis: Long = System.currentTimeMillis()) {
         dataStore.edit { prefs ->
             prefs[Keys.LAST_REMINDER_SYNC_MILLIS] = epochMillis
+        }
+    }
+
+    suspend fun recordUpdateCheckTimestamp(
+        epochMillis: Long = System.currentTimeMillis(),
+        latestVersionTag: String? = null
+    ) {
+        dataStore.edit { prefs ->
+            prefs[Keys.LAST_UPDATE_CHECK_MILLIS] = epochMillis
+            if (!latestVersionTag.isNullOrBlank()) {
+                prefs[Keys.CACHED_LATEST_VERSION_TAG] = latestVersionTag.trim()
+            }
+        }
+    }
+
+    suspend fun setPostponedUpdateVersionTag(versionTag: String) {
+        dataStore.edit { prefs ->
+            prefs[Keys.POSTPONED_UPDATE_VERSION_TAG] = versionTag.trim()
         }
     }
 

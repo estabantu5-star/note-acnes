@@ -176,4 +176,76 @@ class ExampleUnitTest {
             )
         )
     }
+
+    @Test
+    fun `verify SemanticVersionComparator handles v prefix multi-digit segments and short versions`() {
+        // Normalization
+        assertEquals(
+            listOf(1, 0, 5),
+            com.example.update.SemanticVersionComparator.parseVersionParts("v1.0.5")
+        )
+        assertEquals(
+            listOf(1, 0, 5),
+            com.example.update.SemanticVersionComparator.parseVersionParts("1.0.5")
+        )
+        assertEquals(
+            listOf(1, 0, 10),
+            com.example.update.SemanticVersionComparator.parseVersionParts("v1.0.10")
+        )
+        assertEquals(
+            listOf(1, 1, 0),
+            com.example.update.SemanticVersionComparator.parseVersionParts("v1.1")
+        )
+        assertEquals(
+            listOf(1, 0, 5),
+            com.example.update.SemanticVersionComparator.parseVersionParts("V1.0.5-release+build9")
+        )
+
+        // Numerical comparison (1.0.10 must be newer than 1.0.5!)
+        assertTrue(com.example.update.SemanticVersionComparator.isRemoteNewer("1.0.5", "v1.0.10"))
+        assertTrue(com.example.update.SemanticVersionComparator.isRemoteNewer("v1.0.5", "v1.0.6"))
+        assertTrue(com.example.update.SemanticVersionComparator.isRemoteNewer("1.0.9", "v1.1"))
+        assertFalse(com.example.update.SemanticVersionComparator.isRemoteNewer("1.0.5", "v1.0.5"))
+        assertFalse(com.example.update.SemanticVersionComparator.isRemoteNewer("1.0.10", "v1.0.5"))
+    }
+
+    @Test
+    fun `verify GitHubReleaseParser validates trusted HTTPS domains and extracts SHA-256 digests`() {
+        assertEquals(
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            com.example.update.GitHubReleaseParser.extractSha256Hex(
+                "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            )
+        )
+        assertEquals(
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            com.example.update.GitHubReleaseParser.extractSha256FromReleaseNotes(
+                "### Perubahan\nSHA256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "SkinCare-Daily.apk"
+            )
+        )
+
+        // Domain security checks
+        assertTrue(
+            com.example.update.GitHubReleaseParser.isTrustedGitHubDownloadUrl(
+                "https://github.com/estabantu5-star/note-acnes/releases/download/v1.0.5/SkinCare-Daily.apk"
+            )
+        )
+        assertTrue(
+            com.example.update.GitHubReleaseParser.isTrustedGitHubDownloadUrl(
+                "https://objects.githubusercontent.com/github-production-release-asset-2e65be/12345"
+            )
+        )
+        // Reject HTTP (non-HTTPS) and untrusted third-party domains
+        assertFalse(
+            com.example.update.GitHubReleaseParser.isTrustedGitHubDownloadUrl(
+                "http://github.com/estabantu5-star/note-acnes/releases/download/v1.0.5/SkinCare-Daily.apk"
+            )
+        )
+        assertFalse(
+            com.example.update.GitHubReleaseParser.isTrustedGitHubDownloadUrl(
+                "https://malicious-mirror.example.com/SkinCare-Daily.apk"
+            )
+        )
+    }
 }

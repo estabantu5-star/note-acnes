@@ -17,6 +17,13 @@ import com.example.domain.RoutinePeriod
 import com.example.domain.RoutineScheduleHelper
 import com.example.notification.NotificationHelper
 import com.example.notification.ReminderScheduler
+import com.example.update.AppUpdateConstants
+import com.example.update.AppUpdateManager
+import com.example.update.AppUpdateUiState
+import com.example.update.GitHubReleaseAsset
+import com.example.update.GitHubReleaseInfo
+import com.example.update.UpdateErrorType
+import com.example.update.UpdateStatus
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,7 +41,9 @@ class SkinCareViewModel(
     private val appContext: Context,
     private val repository: SkinCareRepository,
     private val preferencesRepository: UserPreferencesRepository,
-    private val reminderScheduler: ReminderScheduler
+    private val reminderScheduler: ReminderScheduler,
+    private val appUpdateManager: AppUpdateManager = AppUpdateManager(appContext),
+    private val enableAutoUpdateCheckOnInit: Boolean = true
 ) : ViewModel() {
 
     private val _selectedTab = MutableStateFlow(MainNavTab.TODAY)
@@ -47,6 +56,17 @@ class SkinCareViewModel(
 
     private val _permissionRefreshTrigger = MutableStateFlow(0L)
     private val _feedbackMessage = MutableStateFlow<String?>(null)
+
+    private val _appUpdateState = MutableStateFlow(
+        AppUpdateUiState(
+            installedVersionName = appUpdateManager.installedVersionName,
+            installedVersionCode = appUpdateManager.installedVersionCode,
+            canInstallUnknownApps = appUpdateManager.canRequestPackageInstalls()
+        )
+    )
+    private var updateCheckJob: Job? = null
+    private var updateDownloadJob: Job? = null
+    private var pendingAutoInstallAfterPermissionGrant = false
 
     private data class CoreDataBundle(
         val allTasks: List<RoutineTaskEntity>,
@@ -62,7 +82,8 @@ class SkinCareViewModel(
         val currentDate: LocalDate,
         val stepTimer: StepTimerState,
         val feedbackMessage: String?,
-        val permTick: Long
+        val permTick: Long,
+        val appUpdateState: AppUpdateUiState
     )
 
     private val coreDataFlow = combine(
@@ -80,9 +101,11 @@ class SkinCareViewModel(
         _highlightedPeriod,
         _currentDate,
         _stepTimer,
-        combine(_feedbackMessage, _permissionRefreshTrigger) { msg, tick -> msg to tick }
-    ) { tab, period, date, timer, (msg, tick) ->
-        UiTriggerBundle(tab, period, date, timer, msg, tick)
+        combine(_feedbackMessage, _permissionRefreshTrigger, _appUpdateState) { msg, tick, upd ->
+            Triple(msg, tick, upd)
+        }
+    ) { tab, period, date, timer, (msg, tick, upd) ->
+        UiTriggerBundle(tab, period, date, timer, msg, tick, upd)
     }
 
     val uiState: StateFlow<SkinCareUiState> = combine(
@@ -105,6 +128,9 @@ class SkinCareViewModel(
         viewModelScope.launch {
             repository.ensureSeeded()
             syncAlarmsWithCurrentState()
+            if (enableAutoUpdateCheckOnInit) {
+                triggerAutomaticUpdateCheckIfDue()
+            }
         }
         // Observe midnight / timezone boundary transitions automatically
         viewModelScope.launch {
@@ -293,6 +319,15 @@ class SkinCareViewModel(
             doctorControlDaysRemaining = controlDaysRemaining,
             historyRecords = historyList,
             weeklySummary = weeklySummary,
+            appUpdateState = trigger.appUpdateState.copy(
+                lastCheckedAtMillis = if (trigger.appUpdateState.lastCheckedAtMillis > 0L) {
+                    trigger.appUpdateState.lastCheckedAtMillis
+                } else {
+                    core.settings.lastUpdateCheckEpochMillis
+                },
+                postponedVersionTag = core.settings.postponedUpdateVersionTag,
+                canInstallUnknownApps = appUpdateManager.canRequestPackageInstalls()
+            ),
             feedbackMessage = trigger.feedbackMessage
         )
     }
@@ -442,6 +477,21 @@ class SkinCareViewModel(
 
     fun refreshPermissionsAndDateOnResume() {
         _permissionRefreshTrigger.value = System.currentTimeMillis()
+        val canInstallNow = appUpdateManager.canRequestPackageInstalls()
+        _appUpdateState.update { current ->
+            val updatedStatus = when (val st = current.status) {
+                is UpdateStatus.ReadyToInstall -> st.copy(requiresInstallPermission = !canInstallNow)
+                else -> st
+            }
+            current.copy(
+                canInstallUnknownApps = canInstallNow,
+                status = updatedStatus
+            )
+        }
+        if (canInstallNow && pendingAutoInstallAfterPermissionGrant) {
+            pendingAutoInstallAfterPermissionGrant = false
+            installDownloadedUpdate()
+        }
         if (!isSimulatedDateOverride) {
             val actualNow = RoutineScheduleHelper.currentLocalDate()
             if (actualNow != _currentDate.value) {
@@ -918,6 +968,330 @@ class SkinCareViewModel(
                 postFeedback("Berhasil mengimpor $count data catatan & pengaturan.")
             }.onFailure {
                 postFeedback("Format JSON tidak valid. Pastikan salinan cadangan lengkap.")
+            }
+        }
+    }
+
+    // --- GitHub Releases APK Updater Actions ---
+
+    /**
+     * Automatic background check on app startup, throttled to at most once every 24 hours.
+     * Non-intrusive: shows a subtle banner if a new version is found and not postponed.
+     */
+    private suspend fun triggerAutomaticUpdateCheckIfDue() {
+        val settings = preferencesRepository.getSettingsSnapshot()
+        val now = System.currentTimeMillis()
+        val elapsed = now - settings.lastUpdateCheckEpochMillis
+        if (settings.lastUpdateCheckEpochMillis > 0L && elapsed < AppUpdateConstants.AUTO_CHECK_INTERVAL_MILLIS) {
+            return
+        }
+        checkForAppUpdates(isManual = false)
+    }
+
+    /**
+     * Checks GitHub Releases API (`estabantu5-star/note-acnes/releases/latest`) for a newer APK.
+     */
+    fun checkForAppUpdates(isManual: Boolean = true) {
+        val currentStatus = _appUpdateState.value.status
+        if (currentStatus is UpdateStatus.Checking || currentStatus is UpdateStatus.Downloading) {
+            return
+        }
+
+        updateCheckJob?.cancel()
+        updateCheckJob = viewModelScope.launch {
+            _appUpdateState.update {
+                it.copy(
+                    status = UpdateStatus.Checking(isManual = isManual),
+                    showUpdateDialog = false
+                )
+            }
+
+            val resultStatus = appUpdateManager.checkForUpdate(isManual = isManual)
+            val checkedAt = System.currentTimeMillis()
+            val settings = preferencesRepository.getSettingsSnapshot()
+
+            val latestTag = when (resultStatus) {
+                is UpdateStatus.UpdateAvailable -> resultStatus.releaseInfo.tagName
+                is UpdateStatus.UpToDate -> resultStatus.latestRelease?.tagName
+                else -> null
+            }
+
+            // Persist check timestamp when check succeeded (UpToDate or UpdateAvailable)
+            if (resultStatus is UpdateStatus.UpToDate || resultStatus is UpdateStatus.UpdateAvailable) {
+                preferencesRepository.recordUpdateCheckTimestamp(
+                    epochMillis = checkedAt,
+                    latestVersionTag = latestTag
+                )
+            }
+
+            when (resultStatus) {
+                is UpdateStatus.UpdateAvailable -> {
+                    val isPostponed = settings.postponedUpdateVersionTag.equals(
+                        resultStatus.releaseInfo.tagName,
+                        ignoreCase = true
+                    )
+                    _appUpdateState.update { state ->
+                        state.copy(
+                            lastCheckedAtMillis = checkedAt,
+                            status = resultStatus,
+                            // Manual check opens dialog directly; auto check shows non-intrusive banner unless postponed
+                            showUpdateDialog = isManual,
+                            showAutoUpdateBanner = !isManual && !isPostponed
+                        )
+                    }
+                    if (isManual) {
+                        postFeedback("Update tersedia: ${resultStatus.releaseInfo.tagName}")
+                    }
+                }
+
+                is UpdateStatus.UpToDate -> {
+                    _appUpdateState.update { state ->
+                        state.copy(
+                            lastCheckedAtMillis = checkedAt,
+                            status = resultStatus,
+                            showUpdateDialog = false,
+                            showAutoUpdateBanner = false
+                        )
+                    }
+                    if (isManual) {
+                        postFeedback("Aplikasi sudah menggunakan versi terbaru (v${appUpdateManager.installedVersionName}).")
+                    }
+                }
+
+                is UpdateStatus.Error -> {
+                    _appUpdateState.update { state ->
+                        // For silent background auto-check, don't clutter UI with network errors if offline
+                        if (!isManual && resultStatus.errorType == UpdateErrorType.NO_INTERNET) {
+                            state.copy(status = UpdateStatus.Idle)
+                        } else {
+                            state.copy(
+                                status = resultStatus,
+                                showUpdateDialog = false
+                            )
+                        }
+                    }
+                    if (isManual) {
+                        postFeedback(resultStatus.userMessage)
+                    }
+                }
+
+                else -> {
+                    _appUpdateState.update { it.copy(status = resultStatus) }
+                }
+            }
+        }
+    }
+
+    /**
+     * Starts downloading the APK for the available GitHub Release.
+     */
+    fun startUpdateDownload() {
+        val currentStatus = _appUpdateState.value.status
+        val (releaseInfo, apkAsset) = when (currentStatus) {
+            is UpdateStatus.UpdateAvailable -> currentStatus.releaseInfo to currentStatus.apkAsset
+            is UpdateStatus.ReadyToInstall -> currentStatus.releaseInfo to currentStatus.apkAsset
+            is UpdateStatus.Error -> {
+                val info = currentStatus.releaseInfo
+                val asset = info?.apkAsset
+                if (info != null && asset != null) {
+                    info to asset
+                } else {
+                    checkForAppUpdates(isManual = true)
+                    return
+                }
+            }
+            else -> return
+        }
+
+        // If already downloaded & verified on disk, jump straight to ReadyToInstall / Installer
+        val existingValidFile = appUpdateManager.getExistingValidApkFile(releaseInfo, apkAsset)
+        if (existingValidFile != null) {
+            val requiresPerm = !appUpdateManager.canRequestPackageInstalls()
+            _appUpdateState.update {
+                it.copy(
+                    status = UpdateStatus.ReadyToInstall(
+                        releaseInfo = releaseInfo,
+                        apkAsset = apkAsset,
+                        apkFilePath = existingValidFile.absolutePath,
+                        requiresInstallPermission = requiresPerm
+                    ),
+                    canInstallUnknownApps = !requiresPerm
+                )
+            }
+            if (!requiresPerm) {
+                installDownloadedUpdate()
+            }
+            return
+        }
+
+        updateDownloadJob?.cancel()
+        updateDownloadJob = viewModelScope.launch {
+            _appUpdateState.update {
+                it.copy(
+                    status = UpdateStatus.Downloading(
+                        releaseInfo = releaseInfo,
+                        apkAsset = apkAsset,
+                        bytesDownloaded = 0L,
+                        totalBytes = apkAsset.sizeBytes,
+                        progressPercent = 0
+                    )
+                )
+            }
+
+            val finalStatus = appUpdateManager.downloadUpdateApk(
+                releaseInfo = releaseInfo,
+                apkAsset = apkAsset,
+                onProgress = { downloaded, total, percent ->
+                    _appUpdateState.update { state ->
+                        state.copy(
+                            status = UpdateStatus.Downloading(
+                                releaseInfo = releaseInfo,
+                                apkAsset = apkAsset,
+                                bytesDownloaded = downloaded,
+                                totalBytes = total,
+                                progressPercent = percent
+                            )
+                        )
+                    }
+                }
+            )
+
+            _appUpdateState.update {
+                it.copy(
+                    status = finalStatus,
+                    canInstallUnknownApps = appUpdateManager.canRequestPackageInstalls()
+                )
+            }
+
+            if (finalStatus is UpdateStatus.ReadyToInstall) {
+                if (!finalStatus.requiresInstallPermission) {
+                    installDownloadedUpdate()
+                } else {
+                    postFeedback("APK selesai diunduh. Izinkan instalasi dari sumber ini untuk memasang update.")
+                }
+            } else if (finalStatus is UpdateStatus.Error) {
+                postFeedback(finalStatus.userMessage)
+            }
+        }
+    }
+
+    /**
+     * Cancels an active APK download and restores UpdateAvailable state.
+     */
+    fun cancelUpdateDownload() {
+        val currentStatus = _appUpdateState.value.status
+        updateDownloadJob?.cancel()
+        updateDownloadJob = null
+        if (currentStatus is UpdateStatus.Downloading) {
+            _appUpdateState.update {
+                it.copy(
+                    status = UpdateStatus.UpdateAvailable(
+                        releaseInfo = currentStatus.releaseInfo,
+                        apkAsset = currentStatus.apkAsset,
+                        downloadedFilePath = null
+                    )
+                )
+            }
+            postFeedback("Unduhan pembaruan dibatalkan.")
+        }
+    }
+
+    /**
+     * Launches Android Package Installer via FileProvider, or prompts for Unknown App Sources permission on Android 8.0+.
+     */
+    fun installDownloadedUpdate() {
+        val currentStatus = _appUpdateState.value.status
+        val readyStatus = when (currentStatus) {
+            is UpdateStatus.ReadyToInstall -> currentStatus
+            is UpdateStatus.UpdateAvailable -> {
+                val path = currentStatus.downloadedFilePath
+                if (!path.isNullOrBlank()) {
+                    UpdateStatus.ReadyToInstall(
+                        releaseInfo = currentStatus.releaseInfo,
+                        apkAsset = currentStatus.apkAsset,
+                        apkFilePath = path,
+                        requiresInstallPermission = !appUpdateManager.canRequestPackageInstalls()
+                    )
+                } else {
+                    startUpdateDownload()
+                    return
+                }
+            }
+            else -> return
+        }
+
+        if (!appUpdateManager.canRequestPackageInstalls()) {
+            _appUpdateState.update {
+                it.copy(
+                    status = readyStatus.copy(requiresInstallPermission = true),
+                    canInstallUnknownApps = false,
+                    showUpdateDialog = true
+                )
+            }
+            return
+        }
+
+        val launchResult = appUpdateManager.launchApkInstaller(readyStatus.apkFilePath)
+        launchResult.onFailure { err ->
+            _appUpdateState.update {
+                it.copy(
+                    status = UpdateStatus.Error(
+                        errorType = UpdateErrorType.INSTALL_FAILED,
+                        userMessage = err.localizedMessage
+                            ?: "Gagal membuka installer Android untuk memasang file APK.",
+                        releaseInfo = readyStatus.releaseInfo
+                    )
+                )
+            }
+            postFeedback("Gagal membuka installer APK. Silakan coba unduh ulang.")
+        }
+    }
+
+    /**
+     * Opens system Settings (`ACTION_MANAGE_UNKNOWN_APP_SOURCES`) so user can allow installing the downloaded APK.
+     */
+    fun openUnknownAppSourcesSettings() {
+        pendingAutoInstallAfterPermissionGrant = true
+        runCatching {
+            val intent = appUpdateManager.createManageUnknownAppSourcesIntent()
+            appContext.startActivity(intent)
+        }.onFailure {
+            pendingAutoInstallAfterPermissionGrant = false
+            postFeedback("Tidak dapat membuka pengaturan izin instalasi secara otomatis.")
+        }
+    }
+
+    fun openUpdateDetailsDialog() {
+        _appUpdateState.update {
+            it.copy(showUpdateDialog = true)
+        }
+    }
+
+    fun dismissUpdateDetailsDialog() {
+        _appUpdateState.update {
+            it.copy(showUpdateDialog = false)
+        }
+    }
+
+    /**
+     * Called when user taps "Nanti" on an available update so we don't repeatedly show auto-update prompts for the same version.
+     */
+    fun postponeAvailableUpdate() {
+        val currentStatus = _appUpdateState.value.status
+        val tagToPostpone = when (currentStatus) {
+            is UpdateStatus.UpdateAvailable -> currentStatus.releaseInfo.tagName
+            is UpdateStatus.ReadyToInstall -> currentStatus.releaseInfo.tagName
+            else -> null
+        }
+        viewModelScope.launch {
+            if (!tagToPostpone.isNullOrBlank()) {
+                preferencesRepository.setPostponedUpdateVersionTag(tagToPostpone)
+            }
+            _appUpdateState.update {
+                it.copy(
+                    showUpdateDialog = false,
+                    showAutoUpdateBanner = false
+                )
             }
         }
     }

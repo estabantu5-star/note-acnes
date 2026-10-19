@@ -69,6 +69,7 @@ import com.example.domain.ProductCategory
 import com.example.domain.RoutinePeriod
 import com.example.domain.RoutineScheduleHelper
 import com.example.ui.SkinCareUiState
+import com.example.ui.components.AboutAndUpdateGlassCard
 import com.example.ui.components.LiquidGlassSurface
 import com.example.ui.components.LiquidPrimaryActionButton
 import com.example.ui.components.LiquidSecondaryGlassButton
@@ -113,6 +114,13 @@ fun SettingsScreen(
     onRestoreDermatologistDefaultRoutine: () -> Unit,
     onExportJson: ((String) -> Unit) -> Unit,
     onImportJson: (String) -> Unit,
+    onCheckForUpdate: () -> Unit = {},
+    onStartUpdateDownload: () -> Unit = {},
+    onCancelUpdateDownload: () -> Unit = {},
+    onInstallDownloadedUpdate: () -> Unit = {},
+    onOpenUnknownSourcesSettings: () -> Unit = {},
+    onOpenUpdateDetailsDialog: () -> Unit = {},
+    onPostponeUpdate: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -154,11 +162,25 @@ fun SettingsScreen(
                     color = glass.textPrimary
                 )
                 Text(
-                    text = "Sesuaikan tampilan Liquid Glass, kelola langkah rutinitas resep dokter, cadangkan data, atau tinjau catatan keamanan.",
+                    text = "Sesuaikan tampilan Liquid Glass, kelola langkah rutinitas resep dokter, periksa pembaruan APK, atau cadangkan data.",
                     style = MaterialTheme.typography.bodySmall,
                     color = glass.textSecondary
                 )
             }
+        }
+
+        // 0. About App & GitHub Releases APK Updater Card
+        item(key = "about_and_app_updater_card") {
+            AboutAndUpdateGlassCard(
+                appUpdateState = uiState.appUpdateState,
+                onCheckForUpdate = onCheckForUpdate,
+                onStartDownload = onStartUpdateDownload,
+                onCancelDownload = onCancelUpdateDownload,
+                onInstallDownloadedApk = onInstallDownloadedUpdate,
+                onOpenUnknownSourcesSettings = onOpenUnknownSourcesSettings,
+                onOpenUpdateDialog = onOpenUpdateDetailsDialog,
+                onPostponeUpdate = onPostponeUpdate
+            )
         }
 
         // 1. Theme & Notification Privacy Card

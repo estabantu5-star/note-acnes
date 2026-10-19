@@ -148,6 +148,9 @@ data class SkinCareUiState(
     val historyRecords: List<HistoryDayRecordUi> = emptyList(),
     val weeklySummary: WeeklyHistorySummaryUi = WeeklyHistorySummaryUi(),
 
+    // App Updater (GitHub Releases APK Updater)
+    val appUpdateState: com.example.update.AppUpdateUiState = com.example.update.AppUpdateUiState(),
+
     // Transient feedback message
     val feedbackMessage: String? = null
 )

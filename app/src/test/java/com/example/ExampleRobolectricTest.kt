@@ -271,4 +271,105 @@ class ExampleRobolectricTest {
         assertTrue(restoredCompletions.first().completed)
         assertEquals(45, prefsRepository.getSettingsSnapshot().morningMinute)
     }
+
+    @Test
+    fun `updater test - AppUpdateManager evaluates GitHub release, downloads APK, verifies SHA-256, and creates FileProvider install intent`() = runBlocking {
+        // Fake APK payload with valid ZIP header ("PK\x03\x04")
+        val fakeApkBytes = ByteArray(128).apply {
+            this[0] = 0x50.toByte()
+            this[1] = 0x4B.toByte()
+            this[2] = 0x03.toByte()
+            this[3] = 0x04.toByte()
+            for (i in 4 until size) {
+                this[i] = (i % 17).toByte()
+            }
+        }
+        val expectedSha256 = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(fakeApkBytes)
+            .joinToString("") { String.format(java.util.Locale.US, "%02x", it) }
+
+        val releaseJson = """
+            {
+              "tag_name": "v1.0.6",
+              "name": "SkinCare Daily v1.0.6 (APK)",
+              "body": "Perbaikan jadwal pengingat & fitur cek update aplikasi.",
+              "draft": false,
+              "prerelease": false,
+              "published_at": "2026-10-19T08:00:00Z",
+              "assets": [
+                {
+                  "name": "SkinCare-Daily.apk",
+                  "browser_download_url": "https://github.com/estabantu5-star/note-acnes/releases/download/v1.0.6/SkinCare-Daily.apk",
+                  "size": ${fakeApkBytes.size},
+                  "digest": "sha256:$expectedSha256"
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val fakeConnectionFactory = com.example.update.HttpConnectionFactory { urlString ->
+            val url = java.net.URL(urlString)
+            object : java.net.HttpURLConnection(url) {
+                override fun connect() {}
+                override fun disconnect() {}
+                override fun usingProxy(): Boolean = false
+                override fun getResponseCode(): Int = HTTP_OK
+                override fun getContentLengthLong(): Long =
+                    if (urlString.endsWith(".apk")) fakeApkBytes.size.toLong() else releaseJson.toByteArray().size.toLong()
+                override fun getInputStream(): java.io.InputStream =
+                    if (urlString.endsWith(".apk")) {
+                        java.io.ByteArrayInputStream(fakeApkBytes)
+                    } else {
+                        java.io.ByteArrayInputStream(releaseJson.toByteArray(Charsets.UTF_8))
+                    }
+            }
+        }
+
+        val updateManager = com.example.update.AppUpdateManager(
+            context = context,
+            ioDispatcher = Dispatchers.Unconfined,
+            connectionFactory = fakeConnectionFactory,
+            installedVersionNameProvider = { "1.0.5" },
+            installedVersionCodeProvider = { 5 },
+            archivePackageValidator = { _, file -> file.exists() && file.length() == fakeApkBytes.size.toLong() }
+        )
+
+        // 1. Check for update -> detects v1.0.6 > 1.0.5
+        val checkStatus = updateManager.checkForUpdate(isManual = true)
+        assertTrue(checkStatus is com.example.update.UpdateStatus.UpdateAvailable)
+        val available = checkStatus as com.example.update.UpdateStatus.UpdateAvailable
+        assertEquals("v1.0.6", available.releaseInfo.tagName)
+        assertEquals("SkinCare-Daily.apk", available.apkAsset.name)
+
+        // 2. Download APK -> reports progress up to 100% and transitions to ReadyToInstall
+        var lastPercent = 0
+        val downloadStatus = updateManager.downloadUpdateApk(
+            releaseInfo = available.releaseInfo,
+            apkAsset = available.apkAsset,
+            onProgress = { _, _, pct -> lastPercent = pct }
+        )
+        assertEquals(100, lastPercent)
+        assertTrue(downloadStatus is com.example.update.UpdateStatus.ReadyToInstall)
+        val ready = downloadStatus as com.example.update.UpdateStatus.ReadyToInstall
+        val downloadedFile = java.io.File(ready.apkFilePath)
+        assertTrue(downloadedFile.exists())
+        assertEquals(fakeApkBytes.size.toLong(), downloadedFile.length())
+
+        // 3. Verify FileProvider install Intent
+        val installIntent = updateManager.createInstallApkIntent(downloadedFile)
+        assertEquals(android.content.Intent.ACTION_VIEW, installIntent.action)
+        assertEquals("application/vnd.android.package-archive", installIntent.type)
+        assertTrue((installIntent.flags and android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0)
+        assertTrue((installIntent.flags and android.content.Intent.FLAG_ACTIVITY_NEW_TASK) != 0)
+        assertNotNull(installIntent.data)
+        assertEquals("content", installIntent.data?.scheme)
+
+        // 4. Verify DataStore persistence of update check timestamp and postponed version tag
+        prefsRepository.recordUpdateCheckTimestamp(1760860000000L, "v1.0.6")
+        prefsRepository.setPostponedUpdateVersionTag("v1.0.6")
+        val snap = prefsRepository.getSettingsSnapshot()
+        assertEquals(1760860000000L, snap.lastUpdateCheckEpochMillis)
+        assertEquals("v1.0.6", snap.cachedLatestVersionTag)
+        assertEquals("v1.0.6", snap.postponedUpdateVersionTag)
+    }
 }

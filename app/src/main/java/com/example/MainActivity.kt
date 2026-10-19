@@ -79,9 +79,11 @@ import com.example.notification.ReminderScheduler
 import com.example.ui.MainNavTab
 import com.example.ui.SkinCareUiState
 import com.example.ui.SkinCareViewModel
+import com.example.ui.components.AppUpdateAvailableDialog
 import com.example.ui.components.FirstRunNotificationSetupDialog
 import com.example.ui.components.LiquidGlassBackground
 import com.example.ui.components.NonBlockingStepTimerBar
+import com.example.ui.components.NonIntrusiveUpdateAvailableBanner
 import com.example.ui.screens.HistoryScreen
 import com.example.ui.screens.ReminderSettingsScreen
 import com.example.ui.screens.SettingsScreen
@@ -217,6 +219,17 @@ fun SkinCareDailyAppRoot(
         )
     }
 
+    // GitHub Releases Update Available Modal Dialog
+    AppUpdateAvailableDialog(
+        appUpdateState = uiState.appUpdateState,
+        onStartDownload = viewModel::startUpdateDownload,
+        onCancelDownload = viewModel::cancelUpdateDownload,
+        onInstallDownloadedApk = viewModel::installDownloadedUpdate,
+        onOpenUnknownSourcesSettings = viewModel::openUnknownAppSourcesSettings,
+        onPostponeUpdate = viewModel::postponeAvailableUpdate,
+        onDismiss = viewModel::dismissUpdateDetailsDialog
+    )
+
     LiquidGlassBackground(modifier = Modifier.fillMaxSize()) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val isExpandedScreen = maxWidth >= 640.dp
@@ -263,6 +276,13 @@ fun SkinCareDailyAppRoot(
                                 onTogglePauseResume = viewModel::togglePauseResumeStepTimer,
                                 onResetAndDismiss = viewModel::resetAndDismissStepTimer,
                                 onRestartThreeMinutes = { viewModel.startStepTimer(uiState.stepTimer.contextLabel) }
+                            )
+
+                            // Non-intrusive banner when automatic 24h background check detects a new GitHub Release
+                            NonIntrusiveUpdateAvailableBanner(
+                                appUpdateState = uiState.appUpdateState,
+                                onOpenUpdateDialog = viewModel::openUpdateDetailsDialog,
+                                onPostponeUpdate = viewModel::postponeAvailableUpdate
                             )
 
                             when (uiState.selectedTab) {
@@ -381,6 +401,13 @@ fun SkinCareDailyAppRoot(
                                         onRestoreDermatologistDefaultRoutine = viewModel::restoreDermatologistDefaultRoutine,
                                         onExportJson = viewModel::exportBackupJson,
                                         onImportJson = viewModel::importBackupJson,
+                                        onCheckForUpdate = { viewModel.checkForAppUpdates(isManual = true) },
+                                        onStartUpdateDownload = viewModel::startUpdateDownload,
+                                        onCancelUpdateDownload = viewModel::cancelUpdateDownload,
+                                        onInstallDownloadedUpdate = viewModel::installDownloadedUpdate,
+                                        onOpenUnknownSourcesSettings = viewModel::openUnknownAppSourcesSettings,
+                                        onOpenUpdateDetailsDialog = viewModel::openUpdateDetailsDialog,
+                                        onPostponeUpdate = viewModel::postponeAvailableUpdate,
                                         modifier = Modifier.weight(1f)
                                     )
                                 }

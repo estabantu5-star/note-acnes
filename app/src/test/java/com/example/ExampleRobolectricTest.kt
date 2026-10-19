@@ -101,6 +101,8 @@ class ExampleRobolectricTest {
         val snapshotsAfterMonday = repository.allDailySnapshotsFlow.first()
         assertEquals(1, snapshotsAfterMonday.size)
         assertEquals(1, snapshotsAfterMonday.first().morningCompletedCount)
+        assertEquals(4, snapshotsAfterMonday.first().morningTotalRequired)
+        assertEquals(3, snapshotsAfterMonday.first().eveningTotalRequired)
         assertEquals(RoutineScheduleHelper.PHARMALENE_PRODUCT, snapshotsAfterMonday.first().scheduledEveningProduct)
 
         // 3. Simulate new calendar date (Tuesday) -> Tuesday checklist is fresh
@@ -123,14 +125,18 @@ class ExampleRobolectricTest {
             isOptional = false,
             isActive = true,
             reminderEnabled = false,
-            reminderOffsetMinutes = 0
+            reminderOffsetMinutes = 0,
+            category = morningCleanse.category,
+            usageAmount = morningCleanse.usageAmount,
+            applicationArea = morningCleanse.applicationArea,
+            scheduledDaysCsv = morningCleanse.scheduledDaysCsv
         )
         val mondayCompletionSnapshot = repository.observeCompletionsForDate("2026-10-19").first().first()
-        assertEquals("Bersihkan wajah", mondayCompletionSnapshot.taskTitleSnapshot)
+        assertEquals("Pembersih Wajah Pagi", mondayCompletionSnapshot.taskTitleSnapshot)
     }
 
     @Test
-    fun `schedule test - AlarmManager replaces changed times, cancels disabled reminders, and gates medication until confirmed`() = runBlocking {
+    fun `schedule test - AlarmManager schedules Morning Evening 2-Week Control Sunscreen and Doxihat 100 mg`() = runBlocking {
         repository.ensureSeeded()
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val shadowAlarmManager = shadowOf(alarmManager)
@@ -139,10 +145,12 @@ class ExampleRobolectricTest {
         val nowMillis = ZonedDateTime.of(2026, 10, 19, 6, 0, 0, 0, zone).toInstant().toEpochMilli()
         val tasks = repository.activeTasksFlow.first()
 
-        // 1. Default settings: Morning (07:00) & Evening (21:00) enabled, Medication disabled
+        // 1. Default settings: Morning (07:00), Evening (21:00), and 2-Week Doctor Control enabled (3 alarms); Doxihat gated until confirmed
         val initialSettings = prefsRepository.getSettingsSnapshot()
         assertFalse(initialSettings.medicationDiscrepancyConfirmed)
         assertFalse(initialSettings.medicationReminderEnabled)
+        assertTrue(initialSettings.doctorControlReminderEnabled)
+        assertEquals(14, initialSettings.medicationDurationDays)
 
         scheduler.syncAllReminders(
             settings = initialSettings,
@@ -152,7 +160,7 @@ class ExampleRobolectricTest {
             nowMillis = nowMillis,
             zoneId = zone
         )
-        assertEquals(2, shadowAlarmManager.scheduledAlarms.size)
+        assertEquals(3, shadowAlarmManager.scheduledAlarms.size)
 
         // 2. Change Morning reminder time to 06:30 and verify old alarm is replaced without duplicates
         prefsRepository.updateMorningReminder(enabled = true, hour = 6, minute = 30)
@@ -165,24 +173,23 @@ class ExampleRobolectricTest {
             nowMillis = nowMillis,
             zoneId = zone
         )
-        assertEquals(2, shadowAlarmManager.scheduledAlarms.size)
+        assertEquals(3, shadowAlarmManager.scheduledAlarms.size)
         val expectedMorning630 = ZonedDateTime.of(2026, 10, 19, 6, 30, 0, 0, zone).toInstant().toEpochMilli()
         assertTrue(shadowAlarmManager.scheduledAlarms.any { it.triggerAtTime == expectedMorning630 })
 
-        // 3. Disable Evening reminder and verify its alarm is canceled
+        // 3. Disable Evening reminder -> 2 alarms remain (Morning + 2-Week Doctor Control)
         prefsRepository.updateEveningReminder(enabled = false, hour = 21, minute = 0)
-        val disabledEveningSettings = prefsRepository.getSettingsSnapshot()
         scheduler.syncAllReminders(
-            settings = disabledEveningSettings,
+            settings = prefsRepository.getSettingsSnapshot(),
             activeTasks = tasks,
             isMorningCompletedToday = false,
             isEveningCompletedToday = false,
             nowMillis = nowMillis,
             zoneId = zone
         )
-        assertEquals(1, shadowAlarmManager.scheduledAlarms.size)
+        assertEquals(2, shadowAlarmManager.scheduledAlarms.size)
 
-        // 4. Enable Sunscreen reapplication -> adds sunscreen alarm; pause -> cancels sunscreen alarm
+        // 4. Enable Sunscreen (pre-outdoor 20m before 08:00 = 07:40 + reapplication every 2h) -> adds 2 sunscreen alarms (total 4)
         prefsRepository.updateSunscreenReminder(
             enabled = true,
             startHour = 8,
@@ -190,7 +197,31 @@ class ExampleRobolectricTest {
             endHour = 16,
             intervalHours = 2,
             paused = false,
-            activeDateIso = "2026-10-19"
+            activeDateIso = "2026-10-19",
+            preOutdoorEnabled = true
+        )
+        scheduler.syncAllReminders(
+            settings = prefsRepository.getSettingsSnapshot(),
+            activeTasks = tasks,
+            isMorningCompletedToday = false,
+            isEveningCompletedToday = false,
+            nowMillis = nowMillis,
+            zoneId = zone
+        )
+        assertEquals(4, shadowAlarmManager.scheduledAlarms.size)
+        val expectedPreOutdoor740 = ZonedDateTime.of(2026, 10, 19, 7, 40, 0, 0, zone).toInstant().toEpochMilli()
+        assertTrue(shadowAlarmManager.scheduledAlarms.any { it.triggerAtTime == expectedPreOutdoor740 })
+
+        // Pause sunscreen -> removes both sunscreen alarms (back to 2)
+        prefsRepository.updateSunscreenReminder(
+            enabled = true,
+            startHour = 8,
+            startMinute = 0,
+            endHour = 16,
+            intervalHours = 2,
+            paused = true,
+            activeDateIso = "2026-10-19",
+            preOutdoorEnabled = true
         )
         scheduler.syncAllReminders(
             settings = prefsRepository.getSettingsSnapshot(),
@@ -201,25 +232,6 @@ class ExampleRobolectricTest {
             zoneId = zone
         )
         assertEquals(2, shadowAlarmManager.scheduledAlarms.size)
-
-        prefsRepository.updateSunscreenReminder(
-            enabled = true,
-            startHour = 8,
-            startMinute = 0,
-            endHour = 16,
-            intervalHours = 2,
-            paused = true,
-            activeDateIso = "2026-10-19"
-        )
-        scheduler.syncAllReminders(
-            settings = prefsRepository.getSettingsSnapshot(),
-            activeTasks = tasks,
-            isMorningCompletedToday = false,
-            isEveningCompletedToday = false,
-            nowMillis = nowMillis,
-            zoneId = zone
-        )
-        assertEquals(1, shadowAlarmManager.scheduledAlarms.size)
 
         // 5. Snooze schedules a single replacement alarm
         scheduler.scheduleSnoozeAlarm(
@@ -230,7 +242,7 @@ class ExampleRobolectricTest {
             useExact = false,
             nowMillis = nowMillis
         )
-        assertEquals(2, shadowAlarmManager.scheduledAlarms.size)
+        assertEquals(3, shadowAlarmManager.scheduledAlarms.size)
     }
 
     @Test
@@ -245,6 +257,7 @@ class ExampleRobolectricTest {
         val exportedJson = repository.exportAllDataToJson()
         assertNotNull(exportedJson)
         assertTrue(exportedJson.contains("morning_cleanse"))
+        assertTrue(exportedJson.contains("evening_pharmalene"))
 
         // Clear day completion and re-import from JSON
         repository.resetChecklistForDate(monday)

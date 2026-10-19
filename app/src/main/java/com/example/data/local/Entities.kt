@@ -3,6 +3,7 @@ package com.example.data.local
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.example.domain.ProductCategory
 
 @Entity(
     tableName = "routine_tasks",
@@ -16,6 +17,11 @@ data class RoutineTaskEntity(
     val title: String,
     val productName: String,
     val instruction: String,
+    val category: String = ProductCategory.SUPPORTIVE_SKINCARE.id,
+    val usageAmount: String = "Perlu konfirmasi ke dokter",
+    val applicationArea: String = "Perlu konfirmasi ke dokter",
+    val durationNote: String = "Sesuai resep dokter",
+    val confirmationNote: String = "",
     val estimatedMinutes: Int = 2,
     val isOptional: Boolean = false,
     val isScheduledActive: Boolean = false,
@@ -62,7 +68,7 @@ data class DailySnapshotEntity(
 )
 data class MedicationDoseLogEntity(
     val dateIso: String, // "YYYY-MM-DD"
-    val slot: String, // "BREAKFAST" (Sehabis Sarapan) or "DINNER" (Sehabis Makan Malam)
+    val slot: String, // "BREAKFAST" (Setelah Makan Pagi) or "DINNER" (Setelah Makan Malam)
     val status: String, // "TAKEN" (Sudah diminum) or "MISSED" (Belum/terlewat)
     val loggedAtEpochMillis: Long
 )

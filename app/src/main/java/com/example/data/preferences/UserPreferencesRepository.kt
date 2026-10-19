@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.domain.RoutineScheduleHelper
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
@@ -53,25 +54,33 @@ data class UserReminderAndAppSettings(
     val snoozeDurationMinutes: Int = 15,
     val useExactAlarm: Boolean = false,
 
-    // Sunscreen Reapplication (Optional, must be explicitly enabled by user)
+    // Labore Biomeprotect Physical Sunscreen (20 min before outdoor + reapply every 2–3 hours)
     val sunscreenReminderEnabled: Boolean = false,
+    val sunscreenPreOutdoorEnabled: Boolean = true,
     val sunscreenStartHour: Int = 9,
     val sunscreenStartMinute: Int = 0,
     val sunscreenEndHour: Int = 16,
-    val sunscreenIntervalHours: Int = 2, // 2 or 3 hours
+    val sunscreenIntervalHours: Int = 2, // 2 or 3 hours per doctor's note
     val sunscreenPaused: Boolean = false,
     val sunscreenActiveDateIso: String = "",
 
-    // Dohixat 100 mg Medication Safety Settings (Disabled until discrepancy is explicitly confirmed)
+    // Doxihat 100 mg Oral Medication Settings (2x/day after breakfast & dinner for 2 weeks / 14 days)
     val medicationDiscrepancyConfirmed: Boolean = false,
     val medicationReminderEnabled: Boolean = false,
     val medicationStartDateIso: String = "",
-    val medicationDurationDays: Int = 5, // Default 5 days (10 capsules / 2 per day) until confirmed by user
-    val medicationTotalCapsulesConfirmed: Int = 10,
+    val medicationDurationDays: Int = RoutineScheduleHelper.DEFAULT_MEDICATION_DURATION_DAYS, // 14 days (2 weeks)
+    val medicationTotalCapsulesConfirmed: Int = RoutineScheduleHelper.DEFAULT_MEDICATION_TOTAL_CAPSULES, // 28 capsules
     val medicationBreakfastHour: Int = 8,
     val medicationBreakfastMinute: Int = 0,
     val medicationDinnerHour: Int = 19,
     val medicationDinnerMinute: Int = 30,
+
+    // Rule 7: Two-Week Doctor Follow-Up Control Reminder (Kontrol 2 Minggu)
+    val doctorControlReminderEnabled: Boolean = true,
+    val therapyStartDateIso: String = "2026-10-19",
+    val doctorControlDays: Int = RoutineScheduleHelper.DEFAULT_DOCTOR_CONTROL_DAYS, // 14 days
+    val doctorControlHour: Int = 9,
+    val doctorControlMinute: Int = 0,
 
     // Last schedule sync timestamp
     val lastReminderSyncEpochMillis: Long = 0L
@@ -101,6 +110,7 @@ class UserPreferencesRepository(
         val USE_EXACT_ALARM = booleanPreferencesKey("use_exact_alarm")
 
         val SUNSCREEN_ENABLED = booleanPreferencesKey("sunscreen_reminder_enabled")
+        val SUNSCREEN_PRE_OUTDOOR_ENABLED = booleanPreferencesKey("sunscreen_pre_outdoor_enabled")
         val SUNSCREEN_START_HOUR = intPreferencesKey("sunscreen_start_hour")
         val SUNSCREEN_START_MINUTE = intPreferencesKey("sunscreen_start_minute")
         val SUNSCREEN_END_HOUR = intPreferencesKey("sunscreen_end_hour")
@@ -117,6 +127,12 @@ class UserPreferencesRepository(
         val MED_BREAKFAST_MINUTE = intPreferencesKey("med_breakfast_minute")
         val MED_DINNER_HOUR = intPreferencesKey("med_dinner_hour")
         val MED_DINNER_MINUTE = intPreferencesKey("med_dinner_minute")
+
+        val DOCTOR_CONTROL_ENABLED = booleanPreferencesKey("doctor_control_reminder_enabled")
+        val THERAPY_START_DATE_ISO = stringPreferencesKey("therapy_start_date_iso")
+        val DOCTOR_CONTROL_DAYS = intPreferencesKey("doctor_control_days")
+        val DOCTOR_CONTROL_HOUR = intPreferencesKey("doctor_control_hour")
+        val DOCTOR_CONTROL_MINUTE = intPreferencesKey("doctor_control_minute")
 
         val LAST_REMINDER_SYNC_MILLIS = longPreferencesKey("last_reminder_sync_millis")
     }
@@ -154,6 +170,7 @@ class UserPreferencesRepository(
             snoozeDurationMinutes = prefs[Keys.SNOOZE_DURATION_MIN] ?: 15,
             useExactAlarm = prefs[Keys.USE_EXACT_ALARM] ?: false,
             sunscreenReminderEnabled = prefs[Keys.SUNSCREEN_ENABLED] ?: false,
+            sunscreenPreOutdoorEnabled = prefs[Keys.SUNSCREEN_PRE_OUTDOOR_ENABLED] ?: true,
             sunscreenStartHour = prefs[Keys.SUNSCREEN_START_HOUR] ?: 9,
             sunscreenStartMinute = prefs[Keys.SUNSCREEN_START_MINUTE] ?: 0,
             sunscreenEndHour = prefs[Keys.SUNSCREEN_END_HOUR] ?: 16,
@@ -161,15 +178,23 @@ class UserPreferencesRepository(
             sunscreenPaused = prefs[Keys.SUNSCREEN_PAUSED] ?: false,
             sunscreenActiveDateIso = prefs[Keys.SUNSCREEN_ACTIVE_DATE_ISO] ?: "",
             medicationDiscrepancyConfirmed = discrepancyConfirmed,
-            // Safety invariant: medication reminders can NEVER be enabled unless discrepancy is confirmed
+            // Safety invariant: medication reminders can NEVER be enabled unless confirmed
             medicationReminderEnabled = discrepancyConfirmed && rawMedEnabled,
             medicationStartDateIso = prefs[Keys.MED_START_DATE_ISO] ?: "",
-            medicationDurationDays = prefs[Keys.MED_DURATION_DAYS] ?: 5,
-            medicationTotalCapsulesConfirmed = prefs[Keys.MED_TOTAL_CAPSULES] ?: 10,
+            medicationDurationDays = prefs[Keys.MED_DURATION_DAYS]
+                ?: RoutineScheduleHelper.DEFAULT_MEDICATION_DURATION_DAYS,
+            medicationTotalCapsulesConfirmed = prefs[Keys.MED_TOTAL_CAPSULES]
+                ?: RoutineScheduleHelper.DEFAULT_MEDICATION_TOTAL_CAPSULES,
             medicationBreakfastHour = prefs[Keys.MED_BREAKFAST_HOUR] ?: 8,
             medicationBreakfastMinute = prefs[Keys.MED_BREAKFAST_MINUTE] ?: 0,
             medicationDinnerHour = prefs[Keys.MED_DINNER_HOUR] ?: 19,
             medicationDinnerMinute = prefs[Keys.MED_DINNER_MINUTE] ?: 30,
+            doctorControlReminderEnabled = prefs[Keys.DOCTOR_CONTROL_ENABLED] ?: true,
+            therapyStartDateIso = prefs[Keys.THERAPY_START_DATE_ISO] ?: "2026-10-19",
+            doctorControlDays = prefs[Keys.DOCTOR_CONTROL_DAYS]
+                ?: RoutineScheduleHelper.DEFAULT_DOCTOR_CONTROL_DAYS,
+            doctorControlHour = prefs[Keys.DOCTOR_CONTROL_HOUR] ?: 9,
+            doctorControlMinute = prefs[Keys.DOCTOR_CONTROL_MINUTE] ?: 0,
             lastReminderSyncEpochMillis = prefs[Keys.LAST_REMINDER_SYNC_MILLIS] ?: 0L
         )
     }
@@ -240,10 +265,12 @@ class UserPreferencesRepository(
         endHour: Int,
         intervalHours: Int,
         paused: Boolean,
-        activeDateIso: String
+        activeDateIso: String,
+        preOutdoorEnabled: Boolean = true
     ) {
         dataStore.edit { prefs ->
             prefs[Keys.SUNSCREEN_ENABLED] = enabled
+            prefs[Keys.SUNSCREEN_PRE_OUTDOOR_ENABLED] = preOutdoorEnabled
             prefs[Keys.SUNSCREEN_START_HOUR] = startHour.coerceIn(5, 18)
             prefs[Keys.SUNSCREEN_START_MINUTE] = startMinute.coerceIn(0, 59)
             prefs[Keys.SUNSCREEN_END_HOUR] = endHour.coerceIn(10, 21)
@@ -274,6 +301,9 @@ class UserPreferencesRepository(
             prefs[Keys.MED_BREAKFAST_MINUTE] = breakfastMinute.coerceIn(0, 59)
             prefs[Keys.MED_DINNER_HOUR] = dinnerHour.coerceIn(0, 23)
             prefs[Keys.MED_DINNER_MINUTE] = dinnerMinute.coerceIn(0, 59)
+            if (startDateIso.isNotBlank() && (prefs[Keys.THERAPY_START_DATE_ISO].isNullOrBlank())) {
+                prefs[Keys.THERAPY_START_DATE_ISO] = startDateIso
+            }
         }
     }
 
@@ -281,6 +311,22 @@ class UserPreferencesRepository(
         dataStore.edit { prefs ->
             val confirmed = prefs[Keys.MED_DISCREPANCY_CONFIRMED] ?: false
             prefs[Keys.MED_REMINDER_ENABLED] = confirmed && enabled
+        }
+    }
+
+    suspend fun updateDoctorControlReminder(
+        enabled: Boolean,
+        therapyStartDateIso: String,
+        controlDays: Int = RoutineScheduleHelper.DEFAULT_DOCTOR_CONTROL_DAYS,
+        hour: Int = 9,
+        minute: Int = 0
+    ) {
+        dataStore.edit { prefs ->
+            prefs[Keys.DOCTOR_CONTROL_ENABLED] = enabled
+            prefs[Keys.THERAPY_START_DATE_ISO] = therapyStartDateIso.trim()
+            prefs[Keys.DOCTOR_CONTROL_DAYS] = controlDays.coerceIn(1, 60)
+            prefs[Keys.DOCTOR_CONTROL_HOUR] = hour.coerceIn(0, 23)
+            prefs[Keys.DOCTOR_CONTROL_MINUTE] = minute.coerceIn(0, 59)
         }
     }
 
@@ -307,6 +353,7 @@ class UserPreferencesRepository(
             prefs[Keys.SNOOZE_DURATION_MIN] = settings.snoozeDurationMinutes
             prefs[Keys.USE_EXACT_ALARM] = settings.useExactAlarm
             prefs[Keys.SUNSCREEN_ENABLED] = settings.sunscreenReminderEnabled
+            prefs[Keys.SUNSCREEN_PRE_OUTDOOR_ENABLED] = settings.sunscreenPreOutdoorEnabled
             prefs[Keys.SUNSCREEN_START_HOUR] = settings.sunscreenStartHour
             prefs[Keys.SUNSCREEN_START_MINUTE] = settings.sunscreenStartMinute
             prefs[Keys.SUNSCREEN_END_HOUR] = settings.sunscreenEndHour
@@ -323,6 +370,11 @@ class UserPreferencesRepository(
             prefs[Keys.MED_BREAKFAST_MINUTE] = settings.medicationBreakfastMinute
             prefs[Keys.MED_DINNER_HOUR] = settings.medicationDinnerHour
             prefs[Keys.MED_DINNER_MINUTE] = settings.medicationDinnerMinute
+            prefs[Keys.DOCTOR_CONTROL_ENABLED] = settings.doctorControlReminderEnabled
+            prefs[Keys.THERAPY_START_DATE_ISO] = settings.therapyStartDateIso
+            prefs[Keys.DOCTOR_CONTROL_DAYS] = settings.doctorControlDays
+            prefs[Keys.DOCTOR_CONTROL_HOUR] = settings.doctorControlHour
+            prefs[Keys.DOCTOR_CONTROL_MINUTE] = settings.doctorControlMinute
         }
     }
 }

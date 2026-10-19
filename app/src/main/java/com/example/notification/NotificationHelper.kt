@@ -19,7 +19,7 @@ object NotificationHelper {
     const val CHANNEL_ID = "skincare_reminders_channel"
     const val CHANNEL_NAME = "Pengingat Skincare"
     const val CHANNEL_DESCRIPTION =
-        "Pengingat jadwal rutinitas perawatan kulit pagi, malam, tabir surya, dan obat sesuai resep dokter kulit."
+        "Pengingat jadwal rutinitas perawatan kulit pagi, malam, tabir surya, obat minum Doxihat, dan kontrol 2 minggu sesuai resep dokter."
 
     const val ACTION_TRIGGER_REMINDER = "com.example.ACTION_TRIGGER_REMINDER"
     const val ACTION_SNOOZE_REMINDER = "com.example.ACTION_SNOOZE_REMINDER"
@@ -37,9 +37,11 @@ object NotificationHelper {
     const val TYPE_MORNING_FOLLOWUP = "MORNING_FOLLOWUP"
     const val TYPE_EVENING_FOLLOWUP = "EVENING_FOLLOWUP"
     const val TYPE_STEP_REMINDER = "STEP_REMINDER"
+    const val TYPE_SUNSCREEN_PRE_OUTDOOR = "SUNSCREEN_PRE_OUTDOOR"
     const val TYPE_SUNSCREEN_REAPPLY = "SUNSCREEN_REAPPLY"
     const val TYPE_MED_BREAKFAST = "MED_BREAKFAST"
     const val TYPE_MED_DINNER = "MED_DINNER"
+    const val TYPE_DOCTOR_CONTROL = "DOCTOR_CONTROL"
     const val TYPE_TEST_NOTIFICATION = "TEST_NOTIFICATION"
 
     const val NOTIF_ID_MORNING = 1001
@@ -49,6 +51,8 @@ object NotificationHelper {
     const val NOTIF_ID_SUNSCREEN = 1005
     const val NOTIF_ID_MED_BREAKFAST = 1006
     const val NOTIF_ID_MED_DINNER = 1007
+    const val NOTIF_ID_DOCTOR_CONTROL = 1008
+    const val NOTIF_ID_SUNSCREEN_PRE_OUTDOOR = 1009
     const val NOTIF_ID_TEST = 1099
 
     fun createNotificationChannel(context: Context) {
@@ -123,9 +127,11 @@ object NotificationHelper {
         val displayBody = if (hideSensitiveContent) {
             when (reminderType) {
                 TYPE_MED_BREAKFAST, TYPE_MED_DINNER ->
-                    "Waktunya jadwal suplemen/obat harian Anda. Ketuk untuk membuka aplikasi."
-                TYPE_SUNSCREEN_REAPPLY ->
-                    "Waktunya mengoleskan ulang pelindung matahari saat beraktivitas di luar ruangan."
+                    "Waktunya jadwal obat minum harian Anda setelah makan. Ketuk untuk membuka aplikasi."
+                TYPE_SUNSCREEN_PRE_OUTDOOR, TYPE_SUNSCREEN_REAPPLY ->
+                    "Waktunya mengoleskan pelindung matahari sesuai catatan dokter."
+                TYPE_DOCTOR_CONTROL ->
+                    "Jadwal kontrol kembali ke dokter setelah 2 minggu terapi."
                 else ->
                     "Waktunya menjalankan langkah perawatan kulit terjadwal Anda."
             }

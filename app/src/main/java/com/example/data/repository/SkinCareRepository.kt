@@ -8,6 +8,7 @@ import com.example.data.local.TaskCompletionEntity
 import com.example.data.preferences.ThemeMode
 import com.example.data.preferences.UserPreferencesRepository
 import com.example.data.preferences.UserReminderAndAppSettings
+import com.example.domain.ProductCategory
 import com.example.domain.RoutinePeriod
 import com.example.domain.RoutineScheduleHelper
 import kotlinx.coroutines.flow.Flow
@@ -35,11 +36,26 @@ class SkinCareRepository(
         dao.observeMedicationLogsForDate(dateIso)
 
     /**
-     * Ensures the dermatologist's initial routine is seeded into Room on first run.
+     * Ensures the dermatologist's initial routine is seeded into Room on first run,
+     * and migrates any legacy un-split evening tasks so Pharmalene Gel (Mon/Wed/Fri) and
+     * Labore Intensive Acne Serum (Tue/Thu/Sat/Sun) are distinct day-scheduled tasks.
      */
     suspend fun ensureSeeded() {
-        val count = dao.getTaskCount()
-        if (count == 0) {
+        val existing = dao.getAllTasksSync()
+        if (existing.isEmpty()) {
+            dao.upsertTasks(RoutineScheduleHelper.createInitialDermatologistTasks())
+            return
+        }
+        val hasPharmalene = existing.any { it.id == RoutineScheduleHelper.TASK_EVENING_PHARMALENE }
+        val hasLaboreSerum = existing.any { it.id == RoutineScheduleHelper.TASK_EVENING_LABORE_SERUM }
+        if (!hasPharmalene || !hasLaboreSerum) {
+            // Retire legacy un-split or non-prescription tasks while preserving history
+            val legacyIds = setOf("evening_scheduled_active", "evening_optional_spot")
+            val retiredLegacy = existing.filter { it.id in legacyIds && it.isActive }
+                .map { it.copy(isActive = false) }
+            if (retiredLegacy.isNotEmpty()) {
+                dao.upsertTasks(retiredLegacy)
+            }
             dao.upsertTasks(RoutineScheduleHelper.createInitialDermatologistTasks())
         }
     }
@@ -86,9 +102,7 @@ class SkinCareRepository(
         nowMillis: Long = System.currentTimeMillis()
     ) {
         val dateIso = RoutineScheduleHelper.toIsoString(date)
-        val activeTasks = dao.getActiveTasksSync().filter {
-            RoutineScheduleHelper.isTaskScheduledForDate(it, date)
-        }
+        val activeTasks = RoutineScheduleHelper.getTasksForDate(dao.getActiveTasksSync(), date)
         val completions = dao.getCompletionsForDateSync(dateIso)
         val completedIds = completions.filter { it.completed }.map { it.taskId }.toSet()
 
@@ -124,9 +138,8 @@ class SkinCareRepository(
         period: RoutinePeriod
     ): Boolean {
         val dateIso = RoutineScheduleHelper.toIsoString(date)
-        val activeRequired = dao.getActiveTasksSync().filter {
-            it.period == period.id && !it.isOptional && RoutineScheduleHelper.isTaskScheduledForDate(it, date)
-        }
+        val activeRequired = RoutineScheduleHelper.getTasksForDate(dao.getActiveTasksSync(), date)
+            .filter { it.period == period.id && !it.isOptional }
         if (activeRequired.isEmpty()) return false
         val completions = dao.getCompletionsForDateSync(dateIso)
         val completedIds = completions.filter { it.completed }.map { it.taskId }.toSet()
@@ -143,7 +156,11 @@ class SkinCareRepository(
         estimatedMinutes: Int,
         isOptional: Boolean,
         reminderEnabled: Boolean,
-        reminderOffsetMinutes: Int
+        reminderOffsetMinutes: Int,
+        category: String = ProductCategory.SUPPORTIVE_SKINCARE.id,
+        usageAmount: String = RoutineScheduleHelper.NEEDS_DOCTOR_CONFIRMATION,
+        applicationArea: String = RoutineScheduleHelper.NEEDS_DOCTOR_CONFIRMATION,
+        scheduledDaysCsv: String = "1,2,3,4,5,6,7"
     ) {
         val currentTasks = dao.getAllTasksSync().filter { it.period == period.id }
         val nextSortOrder = (currentTasks.maxOfOrNull { it.sortOrder } ?: 0) + 1
@@ -156,10 +173,15 @@ class SkinCareRepository(
             title = title.trim(),
             productName = productName.trim(),
             instruction = instruction.trim(),
+            category = category,
+            usageAmount = usageAmount.ifBlank { RoutineScheduleHelper.NEEDS_DOCTOR_CONFIRMATION },
+            applicationArea = applicationArea.ifBlank { RoutineScheduleHelper.NEEDS_DOCTOR_CONFIRMATION },
+            durationNote = "Tambahan pengguna (Perlu konfirmasi ke dokter bila di luar resep)",
+            confirmationNote = RoutineScheduleHelper.NEEDS_DOCTOR_CONFIRMATION,
             estimatedMinutes = estimatedMinutes.coerceIn(1, 30),
             isOptional = isOptional,
             isScheduledActive = false,
-            scheduledDaysCsv = "1,2,3,4,5,6,7",
+            scheduledDaysCsv = scheduledDaysCsv.ifBlank { "1,2,3,4,5,6,7" },
             isActive = true,
             isCustom = true,
             reminderEnabled = reminderEnabled,
@@ -177,13 +199,24 @@ class SkinCareRepository(
         isOptional: Boolean,
         isActive: Boolean,
         reminderEnabled: Boolean,
-        reminderOffsetMinutes: Int
+        reminderOffsetMinutes: Int,
+        category: String? = null,
+        usageAmount: String? = null,
+        applicationArea: String? = null,
+        scheduledDaysCsv: String? = null
     ) {
         val existing = dao.getAllTasksSync().firstOrNull { it.id == taskId } ?: return
         val updated = existing.copy(
             title = title.trim(),
             productName = productName.trim(),
             instruction = instruction.trim(),
+            category = category ?: existing.category,
+            usageAmount = usageAmount?.ifBlank { RoutineScheduleHelper.NEEDS_DOCTOR_CONFIRMATION }
+                ?: existing.usageAmount,
+            applicationArea = applicationArea?.ifBlank { RoutineScheduleHelper.NEEDS_DOCTOR_CONFIRMATION }
+                ?: existing.applicationArea,
+            scheduledDaysCsv = scheduledDaysCsv?.ifBlank { "1,2,3,4,5,6,7" }
+                ?: existing.scheduledDaysCsv,
             estimatedMinutes = estimatedMinutes.coerceIn(1, 30),
             isOptional = isOptional,
             isActive = isActive,
@@ -243,14 +276,15 @@ class SkinCareRepository(
      */
     suspend fun restoreDefaultDermatologistRoutine() {
         val allExisting = dao.getAllTasksSync()
-        val retiredCustoms = allExisting.filter { it.isCustom }.map { it.copy(isActive = false) }
-        if (retiredCustoms.isNotEmpty()) {
-            dao.upsertTasks(retiredCustoms)
+        val defaultIds = RoutineScheduleHelper.createInitialDermatologistTasks().map { it.id }.toSet()
+        val nonDefaults = allExisting.filter { it.id !in defaultIds }.map { it.copy(isActive = false) }
+        if (nonDefaults.isNotEmpty()) {
+            dao.upsertTasks(nonDefaults)
         }
         dao.upsertTasks(RoutineScheduleHelper.createInitialDermatologistTasks())
     }
 
-    // --- Medication Dose Logging (Dohixat 100 mg) ---
+    // --- Medication Dose Logging (Doxihat 100 mg) ---
     suspend fun logMedicationDose(
         date: LocalDate,
         slot: String, // "BREAKFAST" or "DINNER"
@@ -277,7 +311,7 @@ class SkinCareRepository(
         val settings = preferencesRepository.getSettingsSnapshot()
 
         val root = JSONObject()
-        root.put("schemaVersion", 2)
+        root.put("schemaVersion", 3)
         root.put("exportedAtMillis", System.currentTimeMillis())
 
         val tasksArray = JSONArray()
@@ -290,6 +324,11 @@ class SkinCareRepository(
                     put("title", t.title)
                     put("productName", t.productName)
                     put("instruction", t.instruction)
+                    put("category", t.category)
+                    put("usageAmount", t.usageAmount)
+                    put("applicationArea", t.applicationArea)
+                    put("durationNote", t.durationNote)
+                    put("confirmationNote", t.confirmationNote)
                     put("estimatedMinutes", t.estimatedMinutes)
                     put("isOptional", t.isOptional)
                     put("isScheduledActive", t.isScheduledActive)
@@ -364,6 +403,7 @@ class SkinCareRepository(
             put("snoozeDurationMinutes", settings.snoozeDurationMinutes)
             put("useExactAlarm", settings.useExactAlarm)
             put("sunscreenReminderEnabled", settings.sunscreenReminderEnabled)
+            put("sunscreenPreOutdoorEnabled", settings.sunscreenPreOutdoorEnabled)
             put("sunscreenStartHour", settings.sunscreenStartHour)
             put("sunscreenStartMinute", settings.sunscreenStartMinute)
             put("sunscreenEndHour", settings.sunscreenEndHour)
@@ -377,6 +417,11 @@ class SkinCareRepository(
             put("medicationBreakfastMinute", settings.medicationBreakfastMinute)
             put("medicationDinnerHour", settings.medicationDinnerHour)
             put("medicationDinnerMinute", settings.medicationDinnerMinute)
+            put("doctorControlReminderEnabled", settings.doctorControlReminderEnabled)
+            put("therapyStartDateIso", settings.therapyStartDateIso)
+            put("doctorControlDays", settings.doctorControlDays)
+            put("doctorControlHour", settings.doctorControlHour)
+            put("doctorControlMinute", settings.doctorControlMinute)
         }
         root.put("settings", settingsObj)
 
@@ -400,6 +445,11 @@ class SkinCareRepository(
                             title = o.getString("title"),
                             productName = o.getString("productName"),
                             instruction = o.getString("instruction"),
+                            category = o.optString("category", ProductCategory.SUPPORTIVE_SKINCARE.id),
+                            usageAmount = o.optString("usageAmount", RoutineScheduleHelper.NEEDS_DOCTOR_CONFIRMATION),
+                            applicationArea = o.optString("applicationArea", RoutineScheduleHelper.NEEDS_DOCTOR_CONFIRMATION),
+                            durationNote = o.optString("durationNote", "Sesuai resep dokter"),
+                            confirmationNote = o.optString("confirmationNote", ""),
                             estimatedMinutes = o.optInt("estimatedMinutes", 2),
                             isOptional = o.optBoolean("isOptional", false),
                             isScheduledActive = o.optBoolean("isScheduledActive", false),
@@ -501,6 +551,7 @@ class SkinCareRepository(
                     snoozeDurationMinutes = s.optInt("snoozeDurationMinutes", current.snoozeDurationMinutes),
                     useExactAlarm = s.optBoolean("useExactAlarm", current.useExactAlarm),
                     sunscreenReminderEnabled = s.optBoolean("sunscreenReminderEnabled", current.sunscreenReminderEnabled),
+                    sunscreenPreOutdoorEnabled = s.optBoolean("sunscreenPreOutdoorEnabled", current.sunscreenPreOutdoorEnabled),
                     sunscreenStartHour = s.optInt("sunscreenStartHour", current.sunscreenStartHour),
                     sunscreenStartMinute = s.optInt("sunscreenStartMinute", current.sunscreenStartMinute),
                     sunscreenEndHour = s.optInt("sunscreenEndHour", current.sunscreenEndHour),
@@ -513,7 +564,12 @@ class SkinCareRepository(
                     medicationBreakfastHour = s.optInt("medicationBreakfastHour", current.medicationBreakfastHour),
                     medicationBreakfastMinute = s.optInt("medicationBreakfastMinute", current.medicationBreakfastMinute),
                     medicationDinnerHour = s.optInt("medicationDinnerHour", current.medicationDinnerHour),
-                    medicationDinnerMinute = s.optInt("medicationDinnerMinute", current.medicationDinnerMinute)
+                    medicationDinnerMinute = s.optInt("medicationDinnerMinute", current.medicationDinnerMinute),
+                    doctorControlReminderEnabled = s.optBoolean("doctorControlReminderEnabled", current.doctorControlReminderEnabled),
+                    therapyStartDateIso = s.optString("therapyStartDateIso", current.therapyStartDateIso),
+                    doctorControlDays = s.optInt("doctorControlDays", current.doctorControlDays),
+                    doctorControlHour = s.optInt("doctorControlHour", current.doctorControlHour),
+                    doctorControlMinute = s.optInt("doctorControlMinute", current.doctorControlMinute)
                 )
                 preferencesRepository.replaceAllSettings(updated)
             }

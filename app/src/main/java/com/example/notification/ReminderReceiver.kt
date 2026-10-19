@@ -73,7 +73,6 @@ class ReminderReceiver : BroadcastReceiver() {
                     when (reminderType) {
                         NotificationHelper.TYPE_MORNING_ROUTINE,
                         NotificationHelper.TYPE_MORNING_FOLLOWUP -> {
-                            // Do not send unnecessary reminder if morning routine is already completed
                             if (!isMorningDone) {
                                 NotificationHelper.showReminderNotification(
                                     context = context,
@@ -81,7 +80,7 @@ class ReminderReceiver : BroadcastReceiver() {
                                     reminderType = reminderType,
                                     targetPeriod = RoutinePeriod.MORNING.id,
                                     title = "Rutinitas Pagi • SkinCare Daily",
-                                    body = "Waktunya perawatan pagi: Labore Cleansing Mousse, Topicalm Cream, Bioderma Sébium Kerato+, dan Physical Sunscreen.",
+                                    body = "Urutan resep pagi: 1. Pembersih Labore AcnePro, 2. Moisturizer, 3. Bioderma Sébium Kerato+ tipis seluruh wajah, 4. Sunscreen Labore.",
                                     hideSensitiveContent = settings.hideSensitiveNotificationContent,
                                     snoozeMinutes = settings.snoozeDurationMinutes
                                 )
@@ -90,7 +89,6 @@ class ReminderReceiver : BroadcastReceiver() {
 
                         NotificationHelper.TYPE_EVENING_ROUTINE,
                         NotificationHelper.TYPE_EVENING_FOLLOWUP -> {
-                            // Do not send unnecessary reminder if evening routine is already completed
                             if (!isEveningDone) {
                                 NotificationHelper.showReminderNotification(
                                     context = context,
@@ -98,7 +96,7 @@ class ReminderReceiver : BroadcastReceiver() {
                                     reminderType = reminderType,
                                     targetPeriod = RoutinePeriod.EVENING.id,
                                     title = "Rutinitas Malam (${scheduledTonight.dayNameIndonesian})",
-                                    body = "Jadwal produk aktif malam ini: ${scheduledTonight.productName}. Awali dengan pembersih dan pelembap Labore.",
+                                    body = "Urutan resep malam: 1. Pembersih, 2. Moisturizer, 3. ${scheduledTonight.productName}.",
                                     hideSensitiveContent = settings.hideSensitiveNotificationContent,
                                     snoozeMinutes = settings.snoozeDurationMinutes
                                 )
@@ -119,7 +117,22 @@ class ReminderReceiver : BroadcastReceiver() {
                                     reminderType = reminderType,
                                     targetPeriod = targetPeriod,
                                     title = "Langkah Berikutnya: $stepTitle",
-                                    body = if (stepProduct.isNotBlank()) "Gunakan $stepProduct sesuai anjuran dokter kulit." else "Waktunya melanjutkan langkah rutinitas Anda.",
+                                    body = if (stepProduct.isNotBlank()) "Gunakan $stepProduct sesuai resep dokter kulit." else "Waktunya melanjutkan langkah rutinitas Anda.",
+                                    hideSensitiveContent = settings.hideSensitiveNotificationContent,
+                                    snoozeMinutes = settings.snoozeDurationMinutes
+                                )
+                            }
+                        }
+
+                        NotificationHelper.TYPE_SUNSCREEN_PRE_OUTDOOR -> {
+                            if (settings.sunscreenReminderEnabled && !settings.sunscreenPaused) {
+                                NotificationHelper.showReminderNotification(
+                                    context = context,
+                                    notificationId = NotificationHelper.NOTIF_ID_SUNSCREEN_PRE_OUTDOOR,
+                                    reminderType = reminderType,
+                                    targetPeriod = RoutinePeriod.MORNING.id,
+                                    title = "Sunscreen (20 Menit Sebelum Keluar Rumah)",
+                                    body = "Oleskan Labore Biomeprotect Physical Sunscreen 20 menit sebelum keluar rumah sesuai catatan dokter.",
                                     hideSensitiveContent = settings.hideSensitiveNotificationContent,
                                     snoozeMinutes = settings.snoozeDurationMinutes
                                 )
@@ -133,8 +146,8 @@ class ReminderReceiver : BroadcastReceiver() {
                                     notificationId = NotificationHelper.NOTIF_ID_SUNSCREEN,
                                     reminderType = reminderType,
                                     targetPeriod = RoutinePeriod.MORNING.id,
-                                    title = "Pengingat sunscreen",
-                                    body = "Saat beraktivitas di luar ruangan, oleskan ulang Labore Physical Sunscreen setiap ${settings.sunscreenIntervalHours} jam.",
+                                    title = "Pengingat sunscreen (Oles Ulang)",
+                                    body = "Aplikasikan ulang Labore Biomeprotect Physical Sunscreen setiap ${settings.sunscreenIntervalHours} jam sesuai catatan dokter.",
                                     hideSensitiveContent = settings.hideSensitiveNotificationContent,
                                     snoozeMinutes = settings.snoozeDurationMinutes
                                 )
@@ -155,8 +168,8 @@ class ReminderReceiver : BroadcastReceiver() {
                                     notificationId = NotificationHelper.NOTIF_ID_MED_BREAKFAST,
                                     reminderType = reminderType,
                                     targetPeriod = RoutinePeriod.MORNING.id,
-                                    title = "Pengingat Obat Pagi (Sehabis Sarapan)",
-                                    body = "Jadwal Dohixat 100 mg sehabis sarapan. Catat status konsumsi secara manual di aplikasi.",
+                                    title = "Obat Minum Pagi: Doxihat 100 mg",
+                                    body = "Diminum setelah makan pagi (2x sehari selama 2 minggu sesuai resep dokter).",
                                     hideSensitiveContent = settings.hideSensitiveNotificationContent,
                                     snoozeMinutes = settings.snoozeDurationMinutes
                                 )
@@ -177,8 +190,23 @@ class ReminderReceiver : BroadcastReceiver() {
                                     notificationId = NotificationHelper.NOTIF_ID_MED_DINNER,
                                     reminderType = reminderType,
                                     targetPeriod = RoutinePeriod.EVENING.id,
-                                    title = "Pengingat Obat Malam (Sehabis Makan Malam)",
-                                    body = "Jadwal Dohixat 100 mg sehabis makan malam. Catat status konsumsi secara manual di aplikasi.",
+                                    title = "Obat Minum Malam: Doxihat 100 mg",
+                                    body = "Diminum setelah makan malam (2x sehari selama 2 minggu sesuai resep dokter).",
+                                    hideSensitiveContent = settings.hideSensitiveNotificationContent,
+                                    snoozeMinutes = settings.snoozeDurationMinutes
+                                )
+                            }
+                        }
+
+                        NotificationHelper.TYPE_DOCTOR_CONTROL -> {
+                            if (settings.doctorControlReminderEnabled) {
+                                NotificationHelper.showReminderNotification(
+                                    context = context,
+                                    notificationId = NotificationHelper.NOTIF_ID_DOCTOR_CONTROL,
+                                    reminderType = reminderType,
+                                    targetPeriod = RoutinePeriod.MORNING.id,
+                                    title = "Pengingat Kontrol Dokter (2 Minggu)",
+                                    body = "Jadwal kontrol kembali ke dokter kulit setelah dua minggu menjalani terapi sesuai catatan resep.",
                                     hideSensitiveContent = settings.hideSensitiveNotificationContent,
                                     snoozeMinutes = settings.snoozeDurationMinutes
                                 )

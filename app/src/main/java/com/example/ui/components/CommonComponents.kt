@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -50,9 +51,44 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.domain.ProductCategory
 import com.example.domain.RoutinePeriod
+import com.example.domain.RoutineScheduleHelper
 import com.example.ui.StepTimerState
 import com.example.ui.TaskItemUiModel
+
+@Composable
+fun ProductCategoryBadge(
+    category: ProductCategory,
+    modifier: Modifier = Modifier
+) {
+    val bgColor = when (category) {
+        ProductCategory.PRESCRIPTION_TOPICAL,
+        ProductCategory.PRESCRIPTION_ORAL -> MaterialTheme.colorScheme.primaryContainer
+        ProductCategory.SUNSCREEN -> MaterialTheme.colorScheme.tertiaryContainer
+        ProductCategory.SUPPORTIVE_SKINCARE -> MaterialTheme.colorScheme.secondaryContainer
+    }
+    val textColor = when (category) {
+        ProductCategory.PRESCRIPTION_TOPICAL,
+        ProductCategory.PRESCRIPTION_ORAL -> MaterialTheme.colorScheme.onPrimaryContainer
+        ProductCategory.SUNSCREEN -> MaterialTheme.colorScheme.onTertiaryContainer
+        ProductCategory.SUPPORTIVE_SKINCARE -> MaterialTheme.colorScheme.onSecondaryContainer
+    }
+
+    Surface(
+        color = bgColor,
+        shape = MaterialTheme.shapes.extraSmall,
+        modifier = modifier
+    ) {
+        Text(
+            text = category.labelIndonesian,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+            color = textColor,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+        )
+    }
+}
 
 @Composable
 fun NonBlockingStepTimerBar(
@@ -200,18 +236,18 @@ fun FirstRunNotificationSetupDialog(
         },
         title = {
             Text(
-                text = "Atur Pengingat Skincare Harian",
+                text = "Atur Pengingat Sesuai Resep Dokter",
                 style = MaterialTheme.typography.titleLarge
             )
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Pengingat membantu Anda menjalankan urutan perawatan pagi dan malam (termasuk jadwal bergantian Pharmalene Gel & Serum Labore) secara konsisten sesuai resep dokter kulit.",
+                    text = "Pengingat membantu Anda mengikuti urutan perawatan pagi, malam (jadwal Senin/Rabu/Jumat Pharmalene Gel & hari lainnya Serum Labore), serta kontrol 2 minggu sesuai resep dokter.",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    text = "Pilih pengingat awal yang Anda inginkan (jam dapat diubah kapan saja):",
+                    text = "Pilih pengingat utama yang Anda inginkan (jam dapat diubah kapan saja):",
                     style = MaterialTheme.typography.labelLarge
                 )
 
@@ -236,7 +272,7 @@ fun FirstRunNotificationSetupDialog(
                                     style = MaterialTheme.typography.titleSmall
                                 )
                                 Text(
-                                    text = "Pembersih, Topicalm, Sébium Kerato+, Sunscreen",
+                                    text = "Pembersih Labore, Moisturizer, Bioderma Kerato+, Sunscreen",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -260,7 +296,7 @@ fun FirstRunNotificationSetupDialog(
                                     style = MaterialTheme.typography.titleSmall
                                 )
                                 Text(
-                                    text = "Menyesuaikan jadwal malam Pharmalene / Serum Labore",
+                                    text = "Pembersih, Moisturizer, lalu Pharmalene (Sen/Rab/Jum) atau Serum Labore",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -270,7 +306,7 @@ fun FirstRunNotificationSetupDialog(
                 }
 
                 Text(
-                    text = "Catatan: Seluruh data dan jadwal disimpan 100% secara lokal di perangkat Anda tanpa memerlukan koneksi internet.",
+                    text = "Catatan: Seluruh data disimpan 100% secara lokal di perangkat Anda tanpa koneksi internet.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -359,17 +395,22 @@ fun TaskDetailDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     text = item.task.title,
                     style = MaterialTheme.typography.titleLarge
                 )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = if (item.task.period == RoutinePeriod.MORNING.id) "Rutinitas Pagi" else "Rutinitas Malam",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = if (item.task.period == RoutinePeriod.MORNING.id) "Rutinitas Pagi" else "Rutinitas Malam",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    ProductCategoryBadge(category = item.resolvedCategory)
+                }
             }
         },
         text = {
@@ -378,7 +419,12 @@ fun TaskDetailDialog(
                     color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
                     shape = MaterialTheme.shapes.small
                 ) {
-                    Column(modifier = Modifier.padding(10.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
                         Text(
                             text = "Produk Resep Dokter:",
                             style = MaterialTheme.typography.labelMedium,
@@ -392,9 +438,68 @@ fun TaskDetailDialog(
                     }
                 }
 
+                // Rule 4 & 5: Tampilkan jumlah pemakaian, area aplikasi, dan durasi hanya jika tercantum pada resep;
+                // tandai informasi yang belum jelas sebagai "Perlu konfirmasi ke dokter"
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                    shape = MaterialTheme.shapes.small
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "Rincian Resep Dokter:",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "• Jumlah Pemakaian: ${item.resolvedUsageAmount}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text(
+                            text = "• Area Aplikasi: ${item.resolvedApplicationArea}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text(
+                            text = "• Jadwal / Durasi: ${item.resolvedDurationNote}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+
+                if (item.requiresDoctorConfirmation) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f),
+                        shape = MaterialTheme.shapes.small
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.WarningAmber,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = item.resolvedConfirmationNote.ifBlank { RoutineScheduleHelper.NEEDS_DOCTOR_CONFIRMATION },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        }
+                    }
+                }
+
                 Column {
                     Text(
-                        text = "Petunjuk Penggunaan:",
+                        text = "Instruksi Dokter:",
                         style = MaterialTheme.typography.labelLarge
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -403,20 +508,6 @@ fun TaskDetailDialog(
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
-
-                item.scheduleBadge?.let { badge ->
-                    Text(
-                        text = "Jadwal: $badge • Estimasi ~${item.task.estimatedMinutes} menit",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                Text(
-                    text = "Anjuran dokter kulit: Beri jeda sekitar 3 menit antar langkah skincare agar produk meresap optimal.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.secondary
-                )
 
                 FilledTonalButton(
                     onClick = {

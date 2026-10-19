@@ -12,18 +12,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Alarm
-import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.MedicalServices
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.NotificationsOff
-import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.Button
@@ -62,7 +60,8 @@ private enum class ActiveTimePickerTarget {
     EVENING_MAIN,
     SUNSCREEN_START,
     MED_BREAKFAST,
-    MED_DINNER
+    MED_DINNER,
+    DOCTOR_CONTROL
 }
 
 @Composable
@@ -75,6 +74,7 @@ fun ReminderSettingsScreen(
     onToggleStepReminder: (taskId: String, enabled: Boolean, offsetMinutes: Int) -> Unit,
     onConfigureSunscreenReminder: (enabled: Boolean, startHour: Int, startMinute: Int, endHour: Int, intervalHours: Int, paused: Boolean) -> Unit,
     onConfirmAndSaveMedication: (confirmed: Boolean, reminderEnabled: Boolean, startDateIso: String, durationDays: Int, totalCapsules: Int, breakfastHour: Int, breakfastMinute: Int, dinnerHour: Int, dinnerMinute: Int) -> Unit,
+    onUpdateDoctorControlReminder: (enabled: Boolean, therapyStartDateIso: String, controlDays: Int, hour: Int, minute: Int) -> Unit,
     onTriggerTestNotification: () -> Unit,
     onRescheduleAllReminders: () -> Unit,
     modifier: Modifier = Modifier
@@ -83,7 +83,7 @@ fun ReminderSettingsScreen(
     val settings = uiState.settings
     var activePicker by rememberSaveable { mutableStateOf(ActiveTimePickerTarget.NONE) }
 
-    // Local editable state for Medication safety confirmation form
+    // Local editable state for Medication safety confirmation form (Doxihat 100 mg)
     var medConfirmedChecked by rememberSaveable(settings.medicationDiscrepancyConfirmed) {
         mutableStateOf(settings.medicationDiscrepancyConfirmed)
     }
@@ -112,6 +112,20 @@ fun ReminderSettingsScreen(
         mutableIntStateOf(settings.medicationDinnerMinute)
     }
 
+    // Local editable state for Two-Week Doctor Control Follow-up Reminder
+    var controlEnabledSwitch by rememberSaveable(settings.doctorControlReminderEnabled) {
+        mutableStateOf(settings.doctorControlReminderEnabled)
+    }
+    var therapyStartDateInput by rememberSaveable(settings.therapyStartDateIso, uiState.todayDateIso) {
+        mutableStateOf(settings.therapyStartDateIso.ifBlank { uiState.todayDateIso })
+    }
+    var controlHour by rememberSaveable(settings.doctorControlHour) {
+        mutableIntStateOf(settings.doctorControlHour)
+    }
+    var controlMinute by rememberSaveable(settings.doctorControlMinute) {
+        mutableIntStateOf(settings.doctorControlMinute)
+    }
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -122,12 +136,12 @@ fun ReminderSettingsScreen(
         item(key = "title") {
             Column {
                 Text(
-                    text = "Pengaturan Pengingat & Jadwal",
+                    text = "Pengaturan Pengingat & Jadwal Resep",
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    text = "Kelola alarm rutinitas pagi, malam, tabir surya, dan verifikasi resep obat.",
+                    text = "Kelola alarm rutinitas pagi, malam, tabir surya (20 menit sebelum keluar & 2–3 jam), Doxihat 100 mg, dan kontrol 2 minggu.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -284,7 +298,7 @@ fun ReminderSettingsScreen(
                                 style = MaterialTheme.typography.titleSmall
                             )
                             Text(
-                                text = "Saran awal: 07:00 • Otomatis dilewati bila sudah selesai",
+                                text = "Urutan: Pembersih Labore AcnePro, Moisturizer, Bioderma Kerato+, Sunscreen",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -319,7 +333,7 @@ fun ReminderSettingsScreen(
                                 style = MaterialTheme.typography.titleSmall
                             )
                             Text(
-                                text = "Saran awal: 21:00 • Menampilkan jadwal Pharmalene / Serum Labore",
+                                text = "Menyesuaikan hari: Pharmalene Gel (Sen/Rab/Jum) atau Serum Labore",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -352,12 +366,12 @@ fun ReminderSettingsScreen(
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
-                                text = "Jadwal Produk Aktif Malam (Resep Dokter):",
+                                text = "Jadwal Obat Oles & Serum Malam (Resep Dokter):",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.primary
                             )
                             Text(
-                                text = "• Senin, Rabu, Jumat: Pharmalene Gel 10 g",
+                                text = "• Senin, Rabu, Jumat: Pharmalene Gel 10 g (tipis sebanyak 1 biji jagung seluruh wajah)",
                                 style = MaterialTheme.typography.bodySmall
                             )
                             Text(
@@ -370,8 +384,13 @@ fun ReminderSettingsScreen(
             }
         }
 
-        // 3. Sunscreen Reapplication Reminder ("Pengingat sunscreen")
+        // 3. Sunscreen Reapplication Reminder (20 min before outdoor + every 2–3h)
         item(key = "sunscreen_reapplication_card") {
+            val sched = uiState.sunscreenScheduleToday
+            val preOutdoorHm = RoutineScheduleHelper.formatTimeHm(
+                sched.applyBeforeOutdoorTime.hour,
+                sched.applyBeforeOutdoorTime.minute
+            )
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -401,11 +420,11 @@ fun ReminderSettingsScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
                                 Text(
-                                    text = "Pengingat sunscreen (Oles Ulang)",
+                                    text = "Pengingat Sunscreen (Labore Biomeprotect)",
                                     style = MaterialTheme.typography.titleMedium
                                 )
                                 Text(
-                                    text = "Opsional saat beraktivitas di luar ruangan • Berakhir otomatis sore hari",
+                                    text = "Oles 20 menit sebelum keluar rumah & aplikasikan ulang setiap 2–3 jam sesuai catatan dokter.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -433,10 +452,17 @@ fun ReminderSettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Waktu mulai keluar ruangan:",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Waktu keluar rumah:",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                text = "Pengingat oles 20 menit sebelumnya: pukul $preOutdoorHm",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                         OutlinedButton(
                             onClick = { activePicker = ActiveTimePickerTarget.SUNSCREEN_START },
                             modifier = Modifier.testTag("sunscreen_start_time_button")
@@ -451,7 +477,7 @@ fun ReminderSettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Interval pengulangan:",
+                            text = "Interval oles ulang:",
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -549,7 +575,6 @@ fun ReminderSettingsScreen(
                         style = MaterialTheme.typography.titleMedium
                     )
 
-                    // Configurable Snooze Duration
                     Text(
                         text = "Durasi tombol \"Tunda\" pada notifikasi:",
                         style = MaterialTheme.typography.bodyMedium
@@ -574,7 +599,6 @@ fun ReminderSettingsScreen(
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                    // Follow-up reminder a few minutes after initial reminder
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -607,7 +631,6 @@ fun ReminderSettingsScreen(
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                    // Exact Alarm Option ("Alarm tepat waktu")
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -668,7 +691,6 @@ fun ReminderSettingsScreen(
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                    // Optional Per-Step Reminders
                     Text(
                         text = "Pengingat Per Langkah (Opsional)",
                         style = MaterialTheme.typography.titleSmall
@@ -713,7 +735,7 @@ fun ReminderSettingsScreen(
             }
         }
 
-        // 5. MEDICATION REMINDER SAFETY SECTION (Dohixat 100 mg)
+        // 5. ORAL MEDICATION REMINDER SECTION (Doxihat 100 mg — 2x sehari selama 2 minggu, tidak berulang otomatis)
         item(key = "medication_safety_card") {
             Card(
                 modifier = Modifier
@@ -736,18 +758,17 @@ fun ReminderSettingsScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = "Keamanan Pengingat Obat: Dohixat 100 mg",
+                                text = "Pengingat Obat Minum: ${RoutineScheduleHelper.ORAL_MEDICATION_NAME}",
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                text = "Sehabis sarapan & makan malam (2x sehari)",
+                                text = "Setelah makan pagi dan malam, 2x sehari selama 2 minggu (14 hari) sesuai resep dokter.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
 
-                    // Mandatory Discrepancy Notice
                     Surface(
                         color = MaterialTheme.colorScheme.tertiaryContainer,
                         shape = MaterialTheme.shapes.small
@@ -765,19 +786,13 @@ fun ReminderSettingsScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(
-                                    text = "Perbedaan Keterangan Resep Perlu Dikonfirmasi",
+                                    text = RoutineScheduleHelper.NEEDS_DOCTOR_CONFIRMATION,
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.onTertiaryContainer
                                 )
                                 Text(
-                                    text = "Catatan resep menyebutkan konsumsi 2 kali sehari selama 2 minggu (membutuhkan 28 kapsul/dosis), namun jumlah yang tertera adalah 10 kapsul (cukup untuk 5 hari).",
+                                    text = RoutineScheduleHelper.ORAL_MEDICATION_DISCREPANCY_WARNING,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                                )
-                                Text(
-                                    text = "Demi keamanan penggunaan antibiotik, harap konfirmasi jumlah kapsul dan durasi yang dimaksud kepada dokter kulit atau apoteker sebelum mengaktifkan pengingat obat.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onTertiaryContainer
                                 )
                             }
@@ -799,7 +814,7 @@ fun ReminderSettingsScreen(
                             modifier = Modifier.testTag("medication_discrepancy_confirm_checkbox")
                         )
                         Text(
-                            text = "Saya telah mengonfirmasi durasi & jumlah kapsul Dohixat 100 mg dengan dokter kulit / apoteker.",
+                            text = "Saya telah mengonfirmasi durasi 2 minggu (14 hari) & jumlah kapsul Doxihat 100 mg sesuai resep dokter.",
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.weight(1f)
                         )
@@ -809,7 +824,7 @@ fun ReminderSettingsScreen(
                         OutlinedTextField(
                             value = medStartDateInput,
                             onValueChange = { medStartDateInput = it },
-                            label = { Text("Tanggal Mulai (YYYY-MM-DD)") },
+                            label = { Text("Tanggal Mulai Terapi (YYYY-MM-DD)") },
                             singleLine = true,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -823,7 +838,7 @@ fun ReminderSettingsScreen(
                             OutlinedTextField(
                                 value = medDurationDaysInput,
                                 onValueChange = { medDurationDaysInput = it.filter { ch -> ch.isDigit() } },
-                                label = { Text("Durasi (Hari)") },
+                                label = { Text("Durasi (Hari, Resep: 14)") },
                                 singleLine = true,
                                 modifier = Modifier
                                     .weight(1f)
@@ -845,7 +860,7 @@ fun ReminderSettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Pengingat Pagi (Sehabis Sarapan):", style = MaterialTheme.typography.bodySmall)
+                            Text("Setelah Makan Pagi:", style = MaterialTheme.typography.bodySmall)
                             OutlinedButton(
                                 onClick = { activePicker = ActiveTimePickerTarget.MED_BREAKFAST },
                                 modifier = Modifier.testTag("med_breakfast_time_button")
@@ -859,7 +874,7 @@ fun ReminderSettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Pengingat Malam (Sehabis Makan Malam):", style = MaterialTheme.typography.bodySmall)
+                            Text("Setelah Makan Malam:", style = MaterialTheme.typography.bodySmall)
                             OutlinedButton(
                                 onClick = { activePicker = ActiveTimePickerTarget.MED_DINNER },
                                 modifier = Modifier.testTag("med_dinner_time_button")
@@ -874,7 +889,7 @@ fun ReminderSettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Aktifkan Pengingat Dohixat 100 mg",
+                                text = "Aktifkan Alarm Pengingat Doxihat 100 mg",
                                 style = MaterialTheme.typography.titleSmall
                             )
                             Switch(
@@ -887,8 +902,10 @@ fun ReminderSettingsScreen(
 
                     Button(
                         onClick = {
-                            val parsedDays = medDurationDaysInput.toIntOrNull()?.coerceIn(1, 30) ?: 5
-                            val parsedCaps = medTotalCapsulesInput.toIntOrNull()?.coerceIn(1, 60) ?: 10
+                            val parsedDays = medDurationDaysInput.toIntOrNull()?.coerceIn(1, 30)
+                                ?: RoutineScheduleHelper.DEFAULT_MEDICATION_DURATION_DAYS
+                            val parsedCaps = medTotalCapsulesInput.toIntOrNull()?.coerceIn(1, 60)
+                                ?: RoutineScheduleHelper.DEFAULT_MEDICATION_TOTAL_CAPSULES
                             onConfirmAndSaveMedication(
                                 medConfirmedChecked,
                                 medConfirmedChecked && medReminderSwitch,
@@ -905,7 +922,106 @@ fun ReminderSettingsScreen(
                             .fillMaxWidth()
                             .testTag("save_medication_settings_button")
                     ) {
-                        Text("Simpan Pengaturan Obat")
+                        Text("Simpan Pengaturan Obat Minum")
+                    }
+                }
+            }
+        }
+
+        // 6. Rule 7: Two-Week Doctor Control Follow-up Reminder Card
+        item(key = "doctor_control_reminder_card") {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("doctor_control_settings_card"),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.CalendarMonth,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Pengingat Kontrol Dokter (2 Minggu)",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Text(
+                                    text = RoutineScheduleHelper.DOCTOR_CONTROL_NOTE,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Switch(
+                            checked = controlEnabledSwitch,
+                            onCheckedChange = { controlEnabledSwitch = it },
+                            modifier = Modifier.testTag("doctor_control_enable_switch")
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = therapyStartDateInput,
+                        onValueChange = { therapyStartDateInput = it },
+                        label = { Text("Tanggal Mulai Terapi Resep (YYYY-MM-DD)") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("therapy_start_date_input")
+                    )
+
+                    Text(
+                        text = "Jadwal kontrol (+14 hari): ${uiState.doctorControlDateFormatted}",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Jam Pengingat Kontrol:", style = MaterialTheme.typography.bodySmall)
+                        OutlinedButton(
+                            onClick = { activePicker = ActiveTimePickerTarget.DOCTOR_CONTROL },
+                            modifier = Modifier.testTag("doctor_control_time_button")
+                        ) {
+                            Text(RoutineScheduleHelper.formatTimeHm(controlHour, controlMinute))
+                        }
+                    }
+
+                    Button(
+                        onClick = {
+                            onUpdateDoctorControlReminder(
+                                controlEnabledSwitch,
+                                therapyStartDateInput.trim(),
+                                RoutineScheduleHelper.DEFAULT_DOCTOR_CONTROL_DAYS,
+                                controlHour,
+                                controlMinute
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("save_doctor_control_button")
+                    ) {
+                        Text("Simpan Pengingat Kontrol 2 Minggu")
                     }
                 }
             }
@@ -939,7 +1055,7 @@ fun ReminderSettingsScreen(
         }
         ActiveTimePickerTarget.SUNSCREEN_START -> {
             TimePickerModalDialog(
-                title = "Waktu Mulai Aktivitas Luar Ruangan",
+                title = "Waktu Keluar Rumah (Sunscreen)",
                 initialHour = settings.sunscreenStartHour,
                 initialMinute = settings.sunscreenStartMinute,
                 onConfirm = { h, m ->
@@ -958,7 +1074,7 @@ fun ReminderSettingsScreen(
         }
         ActiveTimePickerTarget.MED_BREAKFAST -> {
             TimePickerModalDialog(
-                title = "Waktu Obat Pagi (Sehabis Sarapan)",
+                title = "Waktu Obat Pagi (Setelah Makan Pagi)",
                 initialHour = medBreakfastH,
                 initialMinute = medBreakfastM,
                 onConfirm = { h, m ->
@@ -971,12 +1087,25 @@ fun ReminderSettingsScreen(
         }
         ActiveTimePickerTarget.MED_DINNER -> {
             TimePickerModalDialog(
-                title = "Waktu Obat Malam (Sehabis Makan Malam)",
+                title = "Waktu Obat Malam (Setelah Makan Malam)",
                 initialHour = medDinnerH,
                 initialMinute = medDinnerM,
                 onConfirm = { h, m ->
                     medDinnerH = h
                     medDinnerM = m
+                    activePicker = ActiveTimePickerTarget.NONE
+                },
+                onDismiss = { activePicker = ActiveTimePickerTarget.NONE }
+            )
+        }
+        ActiveTimePickerTarget.DOCTOR_CONTROL -> {
+            TimePickerModalDialog(
+                title = "Waktu Pengingat Kontrol 2 Minggu",
+                initialHour = controlHour,
+                initialMinute = controlMinute,
+                onConfirm = { h, m ->
+                    controlHour = h
+                    controlMinute = m
                     activePicker = ActiveTimePickerTarget.NONE
                 },
                 onDismiss = { activePicker = ActiveTimePickerTarget.NONE }

@@ -10,7 +10,6 @@ import com.example.data.preferences.UserReminderAndAppSettings
 import com.example.domain.RoutinePeriod
 import com.example.domain.RoutineScheduleHelper
 import java.time.Instant
-import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
@@ -34,6 +33,8 @@ class ReminderScheduler(private val context: Context) {
         const val REQ_SUNSCREEN = 1005
         const val REQ_MED_BREAKFAST = 1006
         const val REQ_MED_DINNER = 1007
+        const val REQ_DOCTOR_CONTROL = 1008
+        const val REQ_SUNSCREEN_PRE_OUTDOOR = 1009
         const val REQ_STEP_BASE = 2000
         const val REQ_SNOOZE_BASE = 3000
     }
@@ -178,10 +179,27 @@ class ReminderScheduler(private val context: Context) {
             }
         }
 
-        // 4. Optional Sunscreen Reapplication Reminder
+        // 4. Sunscreen Pre-Outdoor (20 minutes before going outside) & Reapplication Reminder (every 2–3 hours)
         val todayDate = RoutineScheduleHelper.currentLocalDate(zoneId, nowMillis)
         val todayIso = RoutineScheduleHelper.toIsoString(todayDate)
         if (settings.sunscreenReminderEnabled && !settings.sunscreenPaused && settings.sunscreenActiveDateIso == todayIso) {
+            val preOutdoorMillis = computePreOutdoorSunscreenTriggerMillis(settings, nowMillis, zoneId)
+            if (settings.sunscreenPreOutdoorEnabled && preOutdoorMillis != null) {
+                scheduleAlarm(
+                    requestCode = REQ_SUNSCREEN_PRE_OUTDOOR,
+                    triggerAtMillis = preOutdoorMillis,
+                    useExact = settings.useExactAlarm,
+                    intent = buildReminderIntent(
+                        reminderType = NotificationHelper.TYPE_SUNSCREEN_PRE_OUTDOOR,
+                        targetPeriod = RoutinePeriod.MORNING.id,
+                        notificationId = NotificationHelper.NOTIF_ID_SUNSCREEN_PRE_OUTDOOR,
+                        snoozeMinutes = settings.snoozeDurationMinutes
+                    )
+                )
+            } else {
+                cancelAlarm(REQ_SUNSCREEN_PRE_OUTDOOR, NotificationHelper.TYPE_SUNSCREEN_PRE_OUTDOOR)
+            }
+
             val nextSunscreenMillis = computeNextSunscreenTriggerMillis(settings, nowMillis, zoneId)
             if (nextSunscreenMillis != null) {
                 scheduleAlarm(
@@ -199,39 +217,22 @@ class ReminderScheduler(private val context: Context) {
                 cancelAlarm(REQ_SUNSCREEN, NotificationHelper.TYPE_SUNSCREEN_REAPPLY)
             }
         } else {
+            cancelAlarm(REQ_SUNSCREEN_PRE_OUTDOOR, NotificationHelper.TYPE_SUNSCREEN_PRE_OUTDOOR)
             cancelAlarm(REQ_SUNSCREEN, NotificationHelper.TYPE_SUNSCREEN_REAPPLY)
         }
 
-        // 5. Medication Reminders (Dohixat 100 mg) — Strictly gated behind discrepancy confirmation
-        val medActiveToday = RoutineScheduleHelper.isMedicationCourseActiveOnDate(
+        // 5. Oral Medication Reminders (Doxihat 100 mg) — Strictly within 2-week (14-day) course, never auto-repeating after 2 weeks
+        val breakfastTrigger = RoutineScheduleHelper.computeNextMedicationTriggerMillis(
             isConfirmed = settings.medicationDiscrepancyConfirmed,
             courseEnabled = settings.medicationReminderEnabled,
             startDateIso = settings.medicationStartDateIso,
             durationDays = settings.medicationDurationDays,
-            targetDate = todayDate
-        ) || RoutineScheduleHelper.isMedicationCourseActiveOnDate(
-            isConfirmed = settings.medicationDiscrepancyConfirmed,
-            courseEnabled = settings.medicationReminderEnabled,
-            startDateIso = settings.medicationStartDateIso,
-            durationDays = settings.medicationDurationDays,
-            targetDate = todayDate.plusDays(1)
+            hour = settings.medicationBreakfastHour,
+            minute = settings.medicationBreakfastMinute,
+            nowMillis = nowMillis,
+            zoneId = zoneId
         )
-
-        if (settings.medicationDiscrepancyConfirmed && settings.medicationReminderEnabled && medActiveToday) {
-            val breakfastTrigger = RoutineScheduleHelper.computeNextDailyTriggerMillis(
-                hour = settings.medicationBreakfastHour,
-                minute = settings.medicationBreakfastMinute,
-                nowMillis = nowMillis,
-                zoneId = zoneId,
-                isTodayAlreadyCompleted = false
-            )
-            val dinnerTrigger = RoutineScheduleHelper.computeNextDailyTriggerMillis(
-                hour = settings.medicationDinnerHour,
-                minute = settings.medicationDinnerMinute,
-                nowMillis = nowMillis,
-                zoneId = zoneId,
-                isTodayAlreadyCompleted = false
-            )
+        if (breakfastTrigger != null) {
             scheduleAlarm(
                 requestCode = REQ_MED_BREAKFAST,
                 triggerAtMillis = breakfastTrigger,
@@ -243,6 +244,21 @@ class ReminderScheduler(private val context: Context) {
                     snoozeMinutes = settings.snoozeDurationMinutes
                 )
             )
+        } else {
+            cancelAlarm(REQ_MED_BREAKFAST, NotificationHelper.TYPE_MED_BREAKFAST)
+        }
+
+        val dinnerTrigger = RoutineScheduleHelper.computeNextMedicationTriggerMillis(
+            isConfirmed = settings.medicationDiscrepancyConfirmed,
+            courseEnabled = settings.medicationReminderEnabled,
+            startDateIso = settings.medicationStartDateIso,
+            durationDays = settings.medicationDurationDays,
+            hour = settings.medicationDinnerHour,
+            minute = settings.medicationDinnerMinute,
+            nowMillis = nowMillis,
+            zoneId = zoneId
+        )
+        if (dinnerTrigger != null) {
             scheduleAlarm(
                 requestCode = REQ_MED_DINNER,
                 triggerAtMillis = dinnerTrigger,
@@ -255,8 +271,36 @@ class ReminderScheduler(private val context: Context) {
                 )
             )
         } else {
-            cancelAlarm(REQ_MED_BREAKFAST, NotificationHelper.TYPE_MED_BREAKFAST)
             cancelAlarm(REQ_MED_DINNER, NotificationHelper.TYPE_MED_DINNER)
+        }
+
+        // 6. Rule 7: Two-Week Doctor Control Follow-up Reminder
+        if (settings.doctorControlReminderEnabled && settings.therapyStartDateIso.isNotBlank()) {
+            val controlTrigger = RoutineScheduleHelper.computeDoctorControlTriggerMillis(
+                startDateIso = settings.therapyStartDateIso,
+                controlDays = settings.doctorControlDays,
+                hour = settings.doctorControlHour,
+                minute = settings.doctorControlMinute,
+                nowMillis = nowMillis,
+                zoneId = zoneId
+            )
+            if (controlTrigger != null) {
+                scheduleAlarm(
+                    requestCode = REQ_DOCTOR_CONTROL,
+                    triggerAtMillis = controlTrigger,
+                    useExact = settings.useExactAlarm,
+                    intent = buildReminderIntent(
+                        reminderType = NotificationHelper.TYPE_DOCTOR_CONTROL,
+                        targetPeriod = RoutinePeriod.MORNING.id,
+                        notificationId = NotificationHelper.NOTIF_ID_DOCTOR_CONTROL,
+                        snoozeMinutes = settings.snoozeDurationMinutes
+                    )
+                )
+            } else {
+                cancelAlarm(REQ_DOCTOR_CONTROL, NotificationHelper.TYPE_DOCTOR_CONTROL)
+            }
+        } else {
+            cancelAlarm(REQ_DOCTOR_CONTROL, NotificationHelper.TYPE_DOCTOR_CONTROL)
         }
     }
 
@@ -287,6 +331,30 @@ class ReminderScheduler(private val context: Context) {
         )
     }
 
+    fun computePreOutdoorSunscreenTriggerMillis(
+        settings: UserReminderAndAppSettings,
+        nowMillis: Long = System.currentTimeMillis(),
+        zoneId: ZoneId = ZoneId.systemDefault()
+    ): Long? {
+        val nowZdt = Instant.ofEpochMilli(nowMillis).atZone(zoneId)
+        val today = nowZdt.toLocalDate()
+        if (settings.sunscreenActiveDateIso != RoutineScheduleHelper.toIsoString(today)) {
+            return null
+        }
+        val schedule = RoutineScheduleHelper.computeSunscreenScheduleForDay(
+            startHour = settings.sunscreenStartHour,
+            startMinute = settings.sunscreenStartMinute,
+            endHour = settings.sunscreenEndHour,
+            intervalHours = settings.sunscreenIntervalHours
+        )
+        val preOutdoorZdt = ZonedDateTime.of(today, schedule.applyBeforeOutdoorTime, zoneId)
+        return if (preOutdoorZdt.isAfter(nowZdt)) {
+            preOutdoorZdt.toInstant().toEpochMilli()
+        } else {
+            null
+        }
+    }
+
     fun computeNextSunscreenTriggerMillis(
         settings: UserReminderAndAppSettings,
         nowMillis: Long = System.currentTimeMillis(),
@@ -297,20 +365,17 @@ class ReminderScheduler(private val context: Context) {
         if (settings.sunscreenActiveDateIso != RoutineScheduleHelper.toIsoString(today)) {
             return null
         }
-        val startTime = LocalTime.of(
-            settings.sunscreenStartHour.coerceIn(5, 18),
-            settings.sunscreenStartMinute.coerceIn(0, 59)
+        val schedule = RoutineScheduleHelper.computeSunscreenScheduleForDay(
+            startHour = settings.sunscreenStartHour,
+            startMinute = settings.sunscreenStartMinute,
+            endHour = settings.sunscreenEndHour,
+            intervalHours = settings.sunscreenIntervalHours
         )
-        val endTime = LocalTime.of(settings.sunscreenEndHour.coerceIn(10, 21), 0)
-        val intervalHours = settings.sunscreenIntervalHours.coerceIn(2, 3).toLong()
-
-        var slotTime = startTime.plusHours(intervalHours)
-        while (!slotTime.isAfter(endTime)) {
+        for (slotTime in schedule.reapplyTimes) {
             val candidateZdt = ZonedDateTime.of(today, slotTime, zoneId)
             if (candidateZdt.isAfter(nowZdt)) {
                 return candidateZdt.toInstant().toEpochMilli()
             }
-            slotTime = slotTime.plusHours(intervalHours)
         }
         return null
     }
@@ -348,6 +413,11 @@ class ReminderScheduler(private val context: Context) {
 
         val todayIso = RoutineScheduleHelper.toIsoString(RoutineScheduleHelper.currentLocalDate(zoneId, nowMillis))
         if (settings.sunscreenReminderEnabled && !settings.sunscreenPaused && settings.sunscreenActiveDateIso == todayIso) {
+            if (settings.sunscreenPreOutdoorEnabled) {
+                computePreOutdoorSunscreenTriggerMillis(settings, nowMillis, zoneId)?.let { trigger ->
+                    candidates.add("Sunscreen (20m sebelum keluar)" to trigger)
+                }
+            }
             computeNextSunscreenTriggerMillis(settings, nowMillis, zoneId)?.let { trigger ->
                 candidates.add("Pengingat sunscreen" to trigger)
             }
@@ -408,7 +478,6 @@ class ReminderScheduler(private val context: Context) {
                 am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
             }
         }.onFailure {
-            // Fallback to standard set if idle alarm fails on restricted OS builds
             runCatching {
                 am.set(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
             }

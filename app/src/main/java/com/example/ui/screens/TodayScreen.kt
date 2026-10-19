@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccessTime
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Info
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -57,9 +59,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.domain.ProductCategory
 import com.example.domain.RoutineScheduleHelper
 import com.example.ui.SkinCareUiState
 import com.example.ui.TaskItemUiModel
+import com.example.ui.components.ProductCategoryBadge
 import com.example.ui.components.TaskDetailDialog
 import java.time.Instant
 import java.time.ZoneId
@@ -105,10 +109,23 @@ fun TodayScreen(
             )
         }
 
-        // 3. Optional Active Sunscreen Reapplication Banner (if enabled by user)
+        // 3. Rule 6 & Rule 9: Active Conflict Warnings & Chemical Peeling Safety Banner
+        item(key = "therapy_safety_and_conflicts") {
+            TherapySafetyAndConflictCard(
+                conflictWarnings = uiState.routineConflictWarnings
+            )
+        }
+
+        // 4. Optional Active Sunscreen Reapplication Banner (20 min before outdoor + every 2–3h)
         if (uiState.settings.sunscreenReminderEnabled) {
             item(key = "sunscreen_active_banner") {
+                val sched = uiState.sunscreenScheduleToday
+                val preOutdoorHm = RoutineScheduleHelper.formatTimeHm(
+                    sched.applyBeforeOutdoorTime.hour,
+                    sched.applyBeforeOutdoorTime.minute
+                )
                 SunscreenQuickStatusCard(
+                    preOutdoorTimeText = preOutdoorHm,
                     intervalHours = uiState.settings.sunscreenIntervalHours,
                     isPaused = uiState.settings.sunscreenPaused,
                     onTogglePause = { onPauseOrResumeSunscreen(!uiState.settings.sunscreenPaused) },
@@ -117,11 +134,11 @@ fun TodayScreen(
             }
         }
 
-        // 4. MORNING SECTION (Pagi)
+        // 5. Rule 1: MORNING SECTION (Rutinitas Pagi)
         item(key = "morning_header") {
             RoutineSectionHeader(
-                title = "Pagi",
-                subtitle = "Setiap hari • ${uiState.morningCompletedRequired}/${uiState.morningTotalRequired} langkah wajib",
+                title = "Rutinitas Pagi",
+                subtitle = "1. Pembersih Labore AcnePro • 2. Moisturizer • 3. Bioderma Sébium Kerato+ • 4. Sunscreen Labore (${uiState.morningCompletedRequired}/${uiState.morningTotalRequired})",
                 isMorning = true,
                 isAllDone = uiState.morningTotalRequired > 0 && uiState.morningCompletedRequired == uiState.morningTotalRequired
             )
@@ -139,12 +156,12 @@ fun TodayScreen(
             )
         }
 
-        // 5. EVENING SECTION (Malam)
+        // 6. Rule 1 & Rule 2: EVENING SECTION (Rutinitas Malam — Berdasarkan Hari Tertentu)
         item(key = "evening_header") {
             Spacer(modifier = Modifier.height(4.dp))
             RoutineSectionHeader(
-                title = "Malam",
-                subtitle = "Jadwal ${uiState.scheduledEveningProductToday.dayNameIndonesian}: ${uiState.scheduledEveningProductToday.productName} • ${uiState.eveningCompletedRequired}/${uiState.eveningTotalRequired} wajib",
+                title = "Rutinitas Malam",
+                subtitle = "Jadwal ${uiState.scheduledEveningProductToday.dayNameIndonesian}: ${uiState.scheduledEveningProductToday.productName} (${uiState.eveningCompletedRequired}/${uiState.eveningTotalRequired})",
                 isMorning = false,
                 isAllDone = uiState.eveningTotalRequired > 0 && uiState.eveningCompletedRequired == uiState.eveningTotalRequired
             )
@@ -162,7 +179,7 @@ fun TodayScreen(
             )
         }
 
-        // 6. Medication Tracking Card (Dohixat 100 mg — Separate from skincare checklist)
+        // 7. Rule 1: ORAL MEDICATION SECTION (Obat Minum: Doxihat 100 mg — Terpisah dari Rutinitas Oles)
         item(key = "medication_section") {
             Spacer(modifier = Modifier.height(4.dp))
             MedicationTodaySectionCard(
@@ -172,7 +189,15 @@ fun TodayScreen(
             )
         }
 
-        // 7. Reset Today's Checklist Action (Protected by confirmation dialog)
+        // 8. Rule 7: Two-Week Doctor Follow-Up Control Reminder Card (Pengingat Kontrol 2 Minggu)
+        item(key = "doctor_control_section") {
+            DoctorControlFollowUpCard(
+                uiState = uiState,
+                onOpenReminderSettings = onOpenReminderSettings
+            )
+        }
+
+        // 9. Reset Today's Checklist Action (Protected by confirmation dialog)
         item(key = "reset_footer") {
             Row(
                 modifier = Modifier
@@ -374,7 +399,7 @@ private fun TodayProgressAndScheduleCard(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-            // Current Day's Scheduled Evening Product
+            // Current Day's Scheduled Evening Product (Rule 2, 4, 8)
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
                 shape = MaterialTheme.shapes.small
@@ -382,28 +407,40 @@ private fun TodayProgressAndScheduleCard(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(10.dp)
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Outlined.Schedule,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Produk Aktif Malam Ini (${uiState.scheduledEveningProductToday.dayNameIndonesian}):",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Outlined.Schedule,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Jadwal Malam Ini (${uiState.scheduledEveningProductToday.dayNameIndonesian}):",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        ProductCategoryBadge(category = uiState.scheduledEveningProductToday.category)
                     }
-                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = uiState.scheduledEveningProductToday.productName,
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.testTag("scheduled_evening_product_text")
+                    )
+                    Text(
+                        text = "Takaran: ${uiState.scheduledEveningProductToday.usageAmount} • Area: ${uiState.scheduledEveningProductToday.applicationArea}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
                         text = uiState.scheduledEveningProductToday.instruction,
@@ -465,7 +502,62 @@ private fun TodayProgressAndScheduleCard(
 }
 
 @Composable
+private fun TherapySafetyAndConflictCard(
+    conflictWarnings: List<String>
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("therapy_safety_card"),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.WarningAmber,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Catatan Keamanan Terapi Resep Dokter",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Text(
+                text = RoutineScheduleHelper.CHEMICAL_PEELING_WARNING,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("chemical_peeling_warning_text")
+            )
+            conflictWarnings.forEach { warning ->
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = MaterialTheme.shapes.extraSmall
+                ) {
+                    Text(
+                        text = warning,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(8.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun SunscreenQuickStatusCard(
+    preOutdoorTimeText: String,
     intervalHours: Int,
     isPaused: Boolean,
     onTogglePause: () -> Unit,
@@ -489,12 +581,12 @@ private fun SunscreenQuickStatusCard(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = if (isPaused) "Pengingat sunscreen (Dijeda)" else "Pengingat sunscreen Aktif",
+                    text = if (isPaused) "Pengingat Sunscreen (Dijeda)" else "Pengingat Sunscreen Aktif",
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onTertiaryContainer
                 )
                 Text(
-                    text = "Oleskan ulang setiap $intervalHours jam saat di luar ruangan.",
+                    text = "Oles 20 mnt sebelum keluar ($preOutdoorTimeText) & oles ulang tiap $intervalHours jam.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.85f)
                 )
@@ -655,17 +747,20 @@ fun RoutineTaskCard(
                         modifier = Modifier.weight(1f)
                     )
 
-                    if (item.task.isOptional) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.tertiaryContainer,
-                            shape = MaterialTheme.shapes.extraSmall
-                        ) {
-                            Text(
-                                text = "Opsional",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        ProductCategoryBadge(category = item.resolvedCategory)
+                        if (item.task.isOptional) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.tertiaryContainer,
+                                shape = MaterialTheme.shapes.extraSmall
+                            ) {
+                                Text(
+                                    text = "Opsional",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -685,6 +780,40 @@ fun RoutineTaskCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Rule 4 & 5: Display amount, area, and "Perlu konfirmasi ke dokter" when unspecified
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                    shape = MaterialTheme.shapes.extraSmall
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = "Jumlah Pemakaian: ${item.resolvedUsageAmount}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Area Aplikasi: ${item.resolvedApplicationArea}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (item.requiresDoctorConfirmation) {
+                            Text(
+                                text = "Status: ${RoutineScheduleHelper.NEEDS_DOCTOR_CONFIRMATION}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.tertiary
+                            )
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -795,7 +924,10 @@ private fun MedicationTodaySectionCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
                     Icon(
                         imageVector = Icons.Outlined.MedicalServices,
                         contentDescription = null,
@@ -804,12 +936,18 @@ private fun MedicationTodaySectionCard(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "Obat Minum: ${RoutineScheduleHelper.ORAL_MEDICATION_NAME}",
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            ProductCategoryBadge(category = ProductCategory.PRESCRIPTION_ORAL)
+                        }
                         Text(
-                            text = "Catatan Obat Oral: Dohixat 100 mg",
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = "Terpisah dari persentase checklist skincare",
+                            text = RoutineScheduleHelper.ORAL_MEDICATION_INSTRUCTION,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -831,12 +969,12 @@ private fun MedicationTodaySectionCard(
                 ) {
                     Column(modifier = Modifier.padding(10.dp)) {
                         Text(
-                            text = "Perlu Konfirmasi Resep Dokter/Apoteker",
+                            text = RoutineScheduleHelper.NEEDS_DOCTOR_CONFIRMATION,
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onTertiaryContainer
                         )
                         Text(
-                            text = "Resep tertulis 2x sehari selama 2 minggu (28 dosis), tetapi jumlah tertera 10 kapsul. Pengingat obat dinonaktifkan hingga Anda mengonfirmasi durasi di menu Pengingat.",
+                            text = RoutineScheduleHelper.ORAL_MEDICATION_DISCREPANCY_WARNING,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onTertiaryContainer
                         )
@@ -845,14 +983,18 @@ private fun MedicationTodaySectionCard(
             } else {
                 uiState.medicationDayNumber?.let { dayNum ->
                     Text(
-                        text = "Hari ke-$dayNum dari ${uiState.settings.medicationDurationDays} hari (${uiState.settings.medicationTotalCapsulesConfirmed} kapsul terkonfirmasi)",
+                        text = "Hari ke-$dayNum dari ${uiState.settings.medicationDurationDays} hari (Durasi resep: 2 minggu / 14 hari)",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
-                }
+                } ?: Text(
+                    text = "Durasi terapi 2 minggu (${uiState.settings.medicationDurationDays} hari) telah selesai — tidak berulang otomatis.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
 
                 MedicationDoseRow(
-                    slotLabel = "Sehabis Sarapan",
+                    slotLabel = "Setelah Makan Pagi",
                     currentStatus = uiState.todayBreakfastMedLog?.status,
                     onMarkTaken = { onLogDose("BREAKFAST", "TAKEN") },
                     onMarkMissed = { onLogDose("BREAKFAST", "MISSED") },
@@ -862,12 +1004,80 @@ private fun MedicationTodaySectionCard(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 MedicationDoseRow(
-                    slotLabel = "Sehabis Makan Malam",
+                    slotLabel = "Setelah Makan Malam",
                     currentStatus = uiState.todayDinnerMedLog?.status,
                     onMarkTaken = { onLogDose("DINNER", "TAKEN") },
                     onMarkMissed = { onLogDose("DINNER", "MISSED") },
                     tagPrefix = "med_dinner"
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DoctorControlFollowUpCard(
+    uiState: SkinCareUiState,
+    onOpenReminderSettings: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("doctor_control_card"),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.CalendarMonth,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "Pengingat Kontrol Dokter (2 Minggu)",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        text = "Jadwal kontrol: ${uiState.doctorControlDateFormatted}" +
+                            (uiState.doctorControlDaysRemaining?.let { days ->
+                                when {
+                                    days > 0 -> " ($days hari lagi)"
+                                    days == 0 -> " (Hari ini)"
+                                    else -> " (Sudah lewat ${-days} hari)"
+                                }
+                            } ?: ""),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.testTag("doctor_control_date_text")
+                    )
+                    Text(
+                        text = RoutineScheduleHelper.DOCTOR_CONTROL_NOTE,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            TextButton(
+                onClick = onOpenReminderSettings,
+                modifier = Modifier.testTag("open_doctor_control_settings_button")
+            ) {
+                Text("Atur")
             }
         }
     }

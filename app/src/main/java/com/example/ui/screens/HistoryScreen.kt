@@ -39,8 +39,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.domain.RoutineScheduleHelper
 import com.example.ui.HistoryDayRecordUi
 import com.example.ui.SkinCareUiState
 import com.example.ui.WeeklyHistorySummaryUi
@@ -65,7 +65,7 @@ fun HistoryScreen(
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    text = "Data riwayat aktual dari catatan harian yang tersimpan di perangkat.",
+                    text = "Data riwayat aktual dari catatan harian sesuai resep dokter yang tersimpan di perangkat.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -242,7 +242,7 @@ private fun HistoryDayCard(record: HistoryDayRecordUi) {
                         style = MaterialTheme.typography.titleMedium
                     )
                     Text(
-                        text = "Malam: ${record.scheduledEveningProduct}",
+                        text = "Jadwal Malam: ${record.scheduledEveningProduct}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -312,7 +312,7 @@ private fun HistoryDayCard(record: HistoryDayRecordUi) {
                     else -> "-"
                 }
                 Text(
-                    text = "Dohixat 100 mg • Pagi: $bStatus | Malam: $dStatus",
+                    text = "${RoutineScheduleHelper.ORAL_MEDICATION_NAME} • Pagi: $bStatus | Malam: $dStatus",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.secondary
                 )

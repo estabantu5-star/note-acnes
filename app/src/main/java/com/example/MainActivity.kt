@@ -263,7 +263,8 @@ fun SkinCareDailyAppRoot(
                                             startMinute = s.sunscreenStartMinute,
                                             endHour = s.sunscreenEndHour,
                                             intervalHours = s.sunscreenIntervalHours,
-                                            paused = pause
+                                            paused = pause,
+                                            preOutdoorEnabled = s.sunscreenPreOutdoorEnabled
                                         )
                                     },
                                     onStopSunscreen = {
@@ -274,7 +275,8 @@ fun SkinCareDailyAppRoot(
                                             startMinute = s.sunscreenStartMinute,
                                             endHour = s.sunscreenEndHour,
                                             intervalHours = s.sunscreenIntervalHours,
-                                            paused = false
+                                            paused = false,
+                                            preOutdoorEnabled = s.sunscreenPreOutdoorEnabled
                                         )
                                     },
                                     onLogMedicationDose = viewModel::recordMedicationDose,
@@ -290,8 +292,19 @@ fun SkinCareDailyAppRoot(
                                     onUpdateEveningReminder = viewModel::updateEveningReminder,
                                     onUpdateFollowUpAndSnooze = viewModel::updateFollowUpAndSnooze,
                                     onToggleStepReminder = viewModel::toggleStepReminder,
-                                    onConfigureSunscreenReminder = viewModel::configureSunscreenReminder,
+                                    onConfigureSunscreenReminder = { enabled, startH, startM, endH, intervalH, paused ->
+                                        viewModel.configureSunscreenReminder(
+                                            enabled = enabled,
+                                            startHour = startH,
+                                            startMinute = startM,
+                                            endHour = endH,
+                                            intervalHours = intervalH,
+                                            paused = paused,
+                                            preOutdoorEnabled = uiState.settings.sunscreenPreOutdoorEnabled
+                                        )
+                                    },
                                     onConfirmAndSaveMedication = viewModel::confirmAndSaveMedicationSchedule,
+                                    onUpdateDoctorControlReminder = viewModel::updateDoctorControlReminder,
                                     onTriggerTestNotification = viewModel::triggerTestNotification,
                                     onRescheduleAllReminders = viewModel::rescheduleAllRemindersManually,
                                     modifier = Modifier.weight(1f)
@@ -311,7 +324,7 @@ fun SkinCareDailyAppRoot(
                                     onSelectTheme = viewModel::setThemeMode,
                                     onToggleHideSensitiveNotifications = viewModel::setHideSensitiveNotifications,
                                     onOpenReminderSettings = { viewModel.selectTab(MainNavTab.REMINDERS) },
-                                    onAddCustomTask = { period, title, product, instruction, mins, isOptional ->
+                                    onAddCustomTask = { period, title, product, instruction, mins, isOptional, category, daysCsv, usage, area ->
                                         viewModel.addCustomTask(
                                             period = period,
                                             title = title,
@@ -320,10 +333,14 @@ fun SkinCareDailyAppRoot(
                                             estimatedMinutes = mins,
                                             isOptional = isOptional,
                                             reminderEnabled = false,
-                                            reminderOffsetMinutes = 3
+                                            reminderOffsetMinutes = 3,
+                                            category = category,
+                                            usageAmount = usage,
+                                            applicationArea = area,
+                                            scheduledDaysCsv = daysCsv
                                         )
                                     },
-                                    onUpdateTask = { task, title, product, instruction, mins, isOptional, isActive ->
+                                    onUpdateTask = { task, title, product, instruction, mins, isOptional, isActive, category, daysCsv, usage, area ->
                                         viewModel.updateTaskDetails(
                                             taskId = task.id,
                                             title = title,
@@ -333,7 +350,11 @@ fun SkinCareDailyAppRoot(
                                             isOptional = isOptional,
                                             isActive = isActive,
                                             reminderEnabled = task.reminderEnabled,
-                                            reminderOffsetMinutes = task.reminderOffsetMinutes
+                                            reminderOffsetMinutes = task.reminderOffsetMinutes,
+                                            category = category,
+                                            usageAmount = usage,
+                                            applicationArea = area,
+                                            scheduledDaysCsv = daysCsv
                                         )
                                     },
                                     onMoveTaskOrder = viewModel::moveTaskOrder,

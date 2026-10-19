@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DailySnapshotEntity::class,
         MedicationDoseLogEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class SkinCareDatabase : RoomDatabase() {
@@ -47,6 +47,30 @@ abstract class SkinCareDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Explicit migration from schema v2 to v3 adding prescription metadata columns
+         * while preserving all existing completion and history records.
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE `routine_tasks` ADD COLUMN `category` TEXT NOT NULL DEFAULT 'SKINCARE_PENDUKUNG'"
+                )
+                db.execSQL(
+                    "ALTER TABLE `routine_tasks` ADD COLUMN `usageAmount` TEXT NOT NULL DEFAULT 'Perlu konfirmasi ke dokter'"
+                )
+                db.execSQL(
+                    "ALTER TABLE `routine_tasks` ADD COLUMN `applicationArea` TEXT NOT NULL DEFAULT 'Perlu konfirmasi ke dokter'"
+                )
+                db.execSQL(
+                    "ALTER TABLE `routine_tasks` ADD COLUMN `durationNote` TEXT NOT NULL DEFAULT 'Sesuai resep dokter'"
+                )
+                db.execSQL(
+                    "ALTER TABLE `routine_tasks` ADD COLUMN `confirmationNote` TEXT NOT NULL DEFAULT ''"
+                )
+            }
+        }
+
         @Volatile
         private var INSTANCE: SkinCareDatabase? = null
 
@@ -57,7 +81,7 @@ abstract class SkinCareDatabase : RoomDatabase() {
                     SkinCareDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { INSTANCE = it }
             }
@@ -69,7 +93,7 @@ abstract class SkinCareDatabase : RoomDatabase() {
                 SkinCareDatabase::class.java
             )
                 .allowMainThreadQueries()
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
         }
     }

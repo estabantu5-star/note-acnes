@@ -12,6 +12,7 @@ import com.example.data.preferences.ThemeMode
 import com.example.data.preferences.UserPreferencesRepository
 import com.example.data.preferences.UserReminderAndAppSettings
 import com.example.data.repository.SkinCareRepository
+import com.example.domain.ProductCategory
 import com.example.domain.RoutinePeriod
 import com.example.domain.RoutineScheduleHelper
 import com.example.notification.NotificationHelper
@@ -128,9 +129,8 @@ class SkinCareViewModel(
         val todayIso = RoutineScheduleHelper.toIsoString(today)
         val scheduledEvening = RoutineScheduleHelper.getScheduledEveningProductForDate(today)
 
-        val activeTodayTasks = core.allTasks.filter {
-            RoutineScheduleHelper.isTaskScheduledForDate(it, today)
-        }.sortedBy { it.sortOrder }
+        val activeTodayTasks = RoutineScheduleHelper.getTasksForDate(core.allTasks, today)
+        val routineConflictWarnings = RoutineScheduleHelper.detectRoutineConflictsForDate(core.allTasks, today)
 
         val todayCompletionsMap = core.allCompletions
             .filter { it.dateIso == todayIso }
@@ -145,7 +145,15 @@ class SkinCareViewModel(
                     task = task,
                     resolvedProductName = resolved.productName,
                     resolvedInstruction = resolved.instruction,
-                    scheduleBadge = "Setiap Pagi",
+                    resolvedCategory = ProductCategory.fromId(resolved.category),
+                    resolvedUsageAmount = resolved.usageAmount,
+                    resolvedApplicationArea = resolved.applicationArea,
+                    resolvedDurationNote = resolved.durationNote,
+                    resolvedConfirmationNote = resolved.confirmationNote,
+                    scheduleBadge = RoutineScheduleHelper.formatScheduledDaysLabel(
+                        scheduledDaysCsv = resolved.scheduledDaysCsv,
+                        period = RoutinePeriod.MORNING.id
+                    ),
                     isCompleted = comp?.completed == true,
                     completedAtMillis = comp?.completedAtEpochMillis
                 )
@@ -158,13 +166,21 @@ class SkinCareViewModel(
                 val comp = todayCompletionsMap[task.id]
                 val badge = when {
                     task.isScheduledActive -> scheduledEvening.shortBadge
-                    task.isOptional -> "Opsional (Saat ada jerawat aktif)"
-                    else -> "Setiap Malam"
+                    task.isOptional -> "Opsional"
+                    else -> RoutineScheduleHelper.formatScheduledDaysLabel(
+                        scheduledDaysCsv = resolved.scheduledDaysCsv,
+                        period = RoutinePeriod.EVENING.id
+                    )
                 }
                 TaskItemUiModel(
                     task = task,
                     resolvedProductName = resolved.productName,
                     resolvedInstruction = resolved.instruction,
+                    resolvedCategory = ProductCategory.fromId(resolved.category),
+                    resolvedUsageAmount = resolved.usageAmount,
+                    resolvedApplicationArea = resolved.applicationArea,
+                    resolvedDurationNote = resolved.durationNote,
+                    resolvedConfirmationNote = resolved.confirmationNote,
                     scheduleBadge = badge,
                     isCompleted = comp?.completed == true,
                     completedAtMillis = comp?.completedAtEpochMillis
@@ -192,7 +208,14 @@ class SkinCareViewModel(
             isEveningCompletedToday = isEveningFullyDone
         )
 
-        // Medication course calculation
+        val sunscreenSchedule = RoutineScheduleHelper.computeSunscreenScheduleForDay(
+            startHour = core.settings.sunscreenStartHour,
+            startMinute = core.settings.sunscreenStartMinute,
+            endHour = core.settings.sunscreenEndHour,
+            intervalHours = core.settings.sunscreenIntervalHours
+        )
+
+        // Oral Medication (Doxihat 100 mg) 2-week course calculation
         val isMedActiveToday = RoutineScheduleHelper.isMedicationCourseActiveOnDate(
             isConfirmed = core.settings.medicationDiscrepancyConfirmed,
             courseEnabled = core.settings.medicationReminderEnabled,
@@ -211,6 +234,21 @@ class SkinCareViewModel(
         val todayMedLogs = core.allMedLogs.filter { it.dateIso == todayIso }
         val breakfastLog = todayMedLogs.firstOrNull { it.slot == "BREAKFAST" }
         val dinnerLog = todayMedLogs.firstOrNull { it.slot == "DINNER" }
+
+        // Rule 7: Two-Week Doctor Control Follow-up
+        val therapyStart = runCatching {
+            RoutineScheduleHelper.parseIsoDate(core.settings.therapyStartDateIso.ifBlank { todayIso })
+        }.getOrElse { today }
+        val controlDate = RoutineScheduleHelper.computeDoctorControlDate(
+            startDate = therapyStart,
+            controlDays = core.settings.doctorControlDays
+        )
+        val controlFormatted = RoutineScheduleHelper.formatFullIndonesianDate(controlDate)
+        val controlDaysRemaining = RoutineScheduleHelper.computeDoctorControlDaysRemaining(
+            startDateIso = RoutineScheduleHelper.toIsoString(therapyStart),
+            controlDays = core.settings.doctorControlDays,
+            today = today
+        )
 
         // Build History Records from real persisted snapshots & completions
         val historyList = buildHistoryRecords(
@@ -239,6 +277,8 @@ class SkinCareViewModel(
             totalCompletedRequiredToday = totalDone,
             totalRequiredToday = totalReq,
             todayCompletionPercentage = percentage,
+            routineConflictWarnings = routineConflictWarnings,
+            sunscreenScheduleToday = sunscreenSchedule,
             stepTimer = trigger.stepTimer,
             settings = core.settings,
             hasNotificationPermission = hasNotifPerm,
@@ -249,6 +289,8 @@ class SkinCareViewModel(
             medicationDayNumber = medDayNum,
             todayBreakfastMedLog = breakfastLog,
             todayDinnerMedLog = dinnerLog,
+            doctorControlDateFormatted = controlFormatted,
+            doctorControlDaysRemaining = controlDaysRemaining,
             historyRecords = historyList,
             weeklySummary = weeklySummary,
             feedbackMessage = trigger.feedbackMessage
@@ -282,10 +324,7 @@ class SkinCareViewModel(
             val scheduledProduct = snapshot?.scheduledEveningProduct?.takeIf { it.isNotBlank() }
                 ?: RoutineScheduleHelper.getScheduledEveningProductForDate(date).productName
 
-            // Merge snapshot task records with active tasks so retired/edited tasks still display accurately
-            val activeTasksForDate = allTasks.filter {
-                RoutineScheduleHelper.isTaskScheduledForDate(it, date)
-            }.sortedWith(compareBy({ it.period }, { it.sortOrder }))
+            val activeTasksForDate = RoutineScheduleHelper.getTasksForDate(allTasks, date)
 
             val detailItems = mutableListOf<HistoryTaskDetailUi>()
             val seenTaskIds = mutableSetOf<String>()
@@ -307,7 +346,6 @@ class SkinCareViewModel(
                 )
             }
 
-            // Include any completion records from tasks that were later retired/deleted
             dayCompletions.filter { it.taskId !in seenTaskIds }.forEach { comp ->
                 detailItems.add(
                     HistoryTaskDetailUi(
@@ -415,9 +453,6 @@ class SkinCareViewModel(
         }
     }
 
-    /**
-     * Used by acceptance tests to deterministically simulate a new calendar day transition.
-     */
     fun simulateDateForTesting(newDate: LocalDate) {
         isSimulatedDateOverride = true
         _currentDate.value = newDate
@@ -571,14 +606,15 @@ class SkinCareViewModel(
         }
     }
 
-    // --- Sunscreen Reapplication ---
+    // --- Sunscreen Reapplication (20 min before outdoor + every 2–3 hours) ---
     fun configureSunscreenReminder(
         enabled: Boolean,
         startHour: Int,
         startMinute: Int,
         endHour: Int,
         intervalHours: Int,
-        paused: Boolean
+        paused: Boolean,
+        preOutdoorEnabled: Boolean = true
     ) {
         val todayIso = RoutineScheduleHelper.toIsoString(_currentDate.value)
         viewModelScope.launch {
@@ -589,19 +625,20 @@ class SkinCareViewModel(
                 endHour = endHour,
                 intervalHours = intervalHours,
                 paused = paused,
-                activeDateIso = if (enabled) todayIso else ""
+                activeDateIso = if (enabled) todayIso else "",
+                preOutdoorEnabled = preOutdoorEnabled
             )
             syncAlarmsWithCurrentState()
             val msg = when {
                 !enabled -> "Pengingat sunscreen dihentikan."
                 paused -> "Pengingat sunscreen dijeda sementara."
-                else -> "Pengingat sunscreen aktif setiap $intervalHours jam untuk hari ini."
+                else -> "Pengingat sunscreen aktif (20 mnt sebelum keluar & oles ulang tiap $intervalHours jam)."
             }
             postFeedback(msg)
         }
     }
 
-    // --- Medication Safety & Dose Tracking (Dohixat 100 mg) ---
+    // --- Oral Medication Safety & Dose Tracking (Doxihat 100 mg) ---
     fun confirmAndSaveMedicationSchedule(
         confirmed: Boolean,
         reminderEnabled: Boolean,
@@ -631,11 +668,11 @@ class SkinCareViewModel(
             syncAlarmsWithCurrentState()
             postFeedback(
                 if (confirmed && reminderEnabled) {
-                    "Jadwal pengingat Dohixat 100 mg dikonfirmasi ($durationDays hari, $totalCapsules kapsul)."
+                    "Jadwal pengingat Doxihat 100 mg disimpan ($durationDays hari, 2x sehari)."
                 } else if (confirmed) {
-                    "Konfirmasi resep disimpan (pengingat obat tidak diaktifkan)."
+                    "Konfirmasi resep Doxihat 100 mg disimpan (alarm tidak diaktifkan)."
                 } else {
-                    "Pengingat obat dinonaktifkan."
+                    "Pengingat obat minum dinonaktifkan."
                 }
             )
         }
@@ -645,7 +682,7 @@ class SkinCareViewModel(
         viewModelScope.launch {
             preferencesRepository.setMedicationReminderEnabled(enabled)
             syncAlarmsWithCurrentState()
-            postFeedback(if (enabled) "Pengingat obat diaktifkan." else "Pengingat obat dinonaktifkan.")
+            postFeedback(if (enabled) "Pengingat Doxihat 100 mg diaktifkan." else "Pengingat Doxihat 100 mg dinonaktifkan.")
         }
     }
 
@@ -653,9 +690,39 @@ class SkinCareViewModel(
         val targetDate = _currentDate.value
         viewModelScope.launch {
             repository.logMedicationDose(targetDate, slot, status)
-            val slotLabel = if (slot == "BREAKFAST") "Pagi (Sehabis Sarapan)" else "Malam (Sehabis Makan Malam)"
+            val slotLabel = if (slot == "BREAKFAST") "Setelah Makan Pagi" else "Setelah Makan Malam"
             val statusLabel = if (status == "TAKEN") "Sudah diminum" else "Belum/terlewat"
-            postFeedback("Dohixat 100 mg $slotLabel dicatat: $statusLabel.")
+            postFeedback("Doxihat 100 mg ($slotLabel) dicatat: $statusLabel.")
+        }
+    }
+
+    // --- Rule 7: Two-Week Doctor Control Follow-up Reminder ---
+    fun updateDoctorControlReminder(
+        enabled: Boolean,
+        therapyStartDateIso: String,
+        controlDays: Int = RoutineScheduleHelper.DEFAULT_DOCTOR_CONTROL_DAYS,
+        hour: Int = 9,
+        minute: Int = 0
+    ) {
+        viewModelScope.launch {
+            val effectiveStart = therapyStartDateIso.ifBlank {
+                RoutineScheduleHelper.toIsoString(_currentDate.value)
+            }
+            preferencesRepository.updateDoctorControlReminder(
+                enabled = enabled,
+                therapyStartDateIso = effectiveStart,
+                controlDays = controlDays,
+                hour = hour,
+                minute = minute
+            )
+            syncAlarmsWithCurrentState()
+            postFeedback(
+                if (enabled) {
+                    "Pengingat kontrol 2 minggu disimpan (pukul ${RoutineScheduleHelper.formatTimeHm(hour, minute)})."
+                } else {
+                    "Pengingat kontrol dokter dinonaktifkan."
+                }
+            )
         }
     }
 
@@ -671,7 +738,7 @@ class SkinCareViewModel(
                 reminderType = NotificationHelper.TYPE_TEST_NOTIFICATION,
                 targetPeriod = RoutinePeriod.MORNING.id,
                 title = "Uji Notifikasi • SkinCare Daily",
-                body = "Notifikasi berfungsi! Malam ini (${tonight.dayNameIndonesian}) jadwal aktif Anda: ${tonight.productName}.",
+                body = "Notifikasi berfungsi! Malam ini (${tonight.dayNameIndonesian}) jadwal resep Anda: ${tonight.productName}.",
                 hideSensitiveContent = settings.hideSensitiveNotificationContent,
                 snoozeMinutes = settings.snoozeDurationMinutes
             )
@@ -731,8 +798,16 @@ class SkinCareViewModel(
         estimatedMinutes: Int,
         isOptional: Boolean,
         reminderEnabled: Boolean,
-        reminderOffsetMinutes: Int
+        reminderOffsetMinutes: Int,
+        category: String = ProductCategory.SUPPORTIVE_SKINCARE.id,
+        usageAmount: String = RoutineScheduleHelper.NEEDS_DOCTOR_CONFIRMATION,
+        applicationArea: String = RoutineScheduleHelper.NEEDS_DOCTOR_CONFIRMATION,
+        scheduledDaysCsv: String = "1,2,3,4,5,6,7"
     ) {
+        if (RoutineScheduleHelper.containsProhibitedMedicalClaims("$title $productName $instruction")) {
+            postFeedback("Peringatan: Dilarang membuat klaim bahwa produk pasti menyembuhkan jerawat/bekas jerawat.")
+            return
+        }
         viewModelScope.launch {
             repository.addCustomTask(
                 period = period,
@@ -742,7 +817,11 @@ class SkinCareViewModel(
                 estimatedMinutes = estimatedMinutes,
                 isOptional = isOptional,
                 reminderEnabled = reminderEnabled,
-                reminderOffsetMinutes = reminderOffsetMinutes
+                reminderOffsetMinutes = reminderOffsetMinutes,
+                category = category,
+                usageAmount = usageAmount,
+                applicationArea = applicationArea,
+                scheduledDaysCsv = scheduledDaysCsv
             )
             repository.recalculateAndSaveSnapshotForDate(_currentDate.value)
             syncAlarmsWithCurrentState()
@@ -759,8 +838,16 @@ class SkinCareViewModel(
         isOptional: Boolean,
         isActive: Boolean,
         reminderEnabled: Boolean,
-        reminderOffsetMinutes: Int
+        reminderOffsetMinutes: Int,
+        category: String? = null,
+        usageAmount: String? = null,
+        applicationArea: String? = null,
+        scheduledDaysCsv: String? = null
     ) {
+        if (RoutineScheduleHelper.containsProhibitedMedicalClaims("$title $productName $instruction")) {
+            postFeedback("Peringatan: Dilarang membuat klaim bahwa produk pasti menyembuhkan jerawat/bekas jerawat.")
+            return
+        }
         viewModelScope.launch {
             repository.updateTaskDetails(
                 taskId = taskId,
@@ -771,7 +858,11 @@ class SkinCareViewModel(
                 isOptional = isOptional,
                 isActive = isActive,
                 reminderEnabled = reminderEnabled,
-                reminderOffsetMinutes = reminderOffsetMinutes
+                reminderOffsetMinutes = reminderOffsetMinutes,
+                category = category,
+                usageAmount = usageAmount,
+                applicationArea = applicationArea,
+                scheduledDaysCsv = scheduledDaysCsv
             )
             repository.recalculateAndSaveSnapshotForDate(_currentDate.value)
             syncAlarmsWithCurrentState()
@@ -808,7 +899,7 @@ class SkinCareViewModel(
             repository.restoreDefaultDermatologistRoutine()
             repository.recalculateAndSaveSnapshotForDate(_currentDate.value)
             syncAlarmsWithCurrentState()
-            postFeedback("Rutinitas awal dokter kulit (19 Okt 2026) berhasil dipulihkan.")
+            postFeedback("Rutinitas resep dokter kulit berhasil dipulihkan.")
         }
     }
 

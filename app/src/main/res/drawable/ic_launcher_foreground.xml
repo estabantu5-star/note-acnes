@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Subtle inner halo circle inside safe zone -->
+    <path
+        android:fillColor="#2A6B5F"
+        android:pathData="M54,54m-30,0a30,30 0,1 1,60 0a30,30 0,1 1,-60 0" />
+    <!-- Bold serum droplet silhouette -->
+    <path
+        android:fillColor="#F6F4EF"
+        android:pathData="M54,28 C54,28 36,49 36,62 C36,71.94 44.06,80 54,80 C63.94,80 72,71.94 72,62 C72,49 54,28 54,28 Z" />
+    <!-- Botanical leaf cutout / accent inside droplet -->
+    <path
+        android:fillColor="#4E8C7F"
+        android:pathData="M54,44 C47,51 45,59 48,66 C53,64 59,58 61,50 C59,47 56,45 54,44 Z" />
+    <!-- Small sparkle / plus badge representing dermatology care -->
+    <path
+        android:fillColor="#D9E8E3"
+        android:pathData="M67,34 L69,39 L74,41 L69,43 L67,48 L65,43 L60,41 L65,39 Z" />
+</vector>

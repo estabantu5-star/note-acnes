@@ -1,0 +1,6 @@
+{
+  "name": "SkinCare Daily",
+  "description": "Aplikasi Android pendamping rutinitas perawatan kulit harian sesuai resep dokter kulit, lengkap dengan pencatatan riwayat dan pengingat jadwal.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

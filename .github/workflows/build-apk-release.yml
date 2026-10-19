@@ -24,11 +24,8 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Verify & Ensure Root Gradle Files Exist
+      - name: Verify & Ensure All Gradle and Resource Files Exist
         run: |
-          echo "=== Current Workspace Files ==="
-          ls -la
-
           if [ ! -f "settings.gradle.kts" ]; then
             cat << 'EOF' > settings.gradle.kts
           pluginManagement {
@@ -85,6 +82,10 @@ jobs:
 
           if [ ! -f ".env.example" ]; then
             echo "# GEMINI_API_KEY=MY_GEMINI_API_KEY" > .env.example
+          fi
+
+          if [ ! -f "app/proguard-rules.pro" ]; then
+            touch app/proguard-rules.pro
           fi
 
           mkdir -p gradle
@@ -195,6 +196,60 @@ jobs:
           EOF
           fi
 
+          # Ensure Android XML & Font resources exist
+          mkdir -p app/src/main/res/values
+          if [ ! -f "app/src/main/res/values/themes.xml" ]; then
+            cat << 'EOF' > app/src/main/res/values/themes.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="Theme.MyApplication" parent="android:Theme.DeviceDefault.NoActionBar" />
+          </resources>
+          EOF
+          fi
+
+          mkdir -p app/src/main/res/xml
+          if [ ! -f "app/src/main/res/xml/backup_rules.xml" ]; then
+            cat << 'EOF' > app/src/main/res/xml/backup_rules.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <full-backup-content>
+          </full-backup-content>
+          EOF
+          fi
+
+          if [ ! -f "app/src/main/res/xml/data_extraction_rules.xml" ]; then
+            cat << 'EOF' > app/src/main/res/xml/data_extraction_rules.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <data-extraction-rules>
+              <cloud-backup>
+              </cloud-backup>
+          </data-extraction-rules>
+          EOF
+          fi
+
+          mkdir -p app/src/main/res/mipmap-anydpi-v26
+          if [ ! -f "app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml" ]; then
+            cat << 'EOF' > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@drawable/ic_launcher_background" />
+              <foreground android:drawable="@drawable/ic_launcher_foreground" />
+              <monochrome android:drawable="@drawable/ic_launcher_foreground" />
+          </adaptive-icon>
+          EOF
+          fi
+
+          if [ ! -f "app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml" ]; then
+            cp app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+          fi
+
+          mkdir -p app/src/main/res/font
+          if [ ! -f "app/src/main/res/font/plus_jakarta_sans.ttf" ]; then
+            curl -L -s "https://fonts.gstatic.com/s/plusjakartasans/v12/LDIbaomQNQcsA88c7O9yZ4KMCoOg4IA6-91aHEjcWuA_qU79TR_Q.ttf" -o app/src/main/res/font/plus_jakarta_sans.ttf
+          fi
+          if [ ! -f "app/src/main/res/font/fraunces.ttf" ]; then
+            curl -L -s "https://fonts.gstatic.com/s/fraunces/v38/6NUh8FyLNQOQZAnv9bYEvDiIdE9Ea92uemAk_WBq8U_9v0c2Wa0K7iN7hzFUPJH58nib1603gg7S2nfgRYIctxuTCf7W.ttf" -o app/src/main/res/font/fraunces.ttf
+          fi
+
       - name: Accept Android SDK Licenses
         run: |
           export ANDROID_SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
@@ -225,7 +280,7 @@ jobs:
           gradle-version: '9.3.1'
 
       - name: Build Debug APK
-        run: gradle :app:assembleDebug --no-daemon --stacktrace
+        run: gradle :app:assembleDebug --no-daemon --info
 
       - name: Prepare Release APK
         run: |

@@ -68,6 +68,8 @@ import com.example.domain.ProductCategory
 import com.example.domain.RoutineScheduleHelper
 import com.example.ui.SkinCareUiState
 import com.example.ui.TaskItemUiModel
+import com.example.ui.components.LiquidCircleIconButton
+import com.example.ui.components.LiquidGlassModalDialog
 import com.example.ui.components.LiquidGlassPill
 import com.example.ui.components.LiquidGlassSurface
 import com.example.ui.components.LiquidPrimaryActionButton
@@ -244,20 +246,14 @@ fun TodayScreen(
     }
 
     if (showResetConfirmDialog) {
-        AlertDialog(
+        LiquidGlassModalDialog(
             onDismissRequest = { showResetConfirmDialog = false },
-            shape = RoundedCornerShape(28.dp),
-            containerColor = glass.glassSurfaceElevated,
-            title = {
-                Text(
-                    text = "Reset Checklist Hari Ini?",
-                    fontWeight = FontWeight.Bold,
-                    color = glass.textPrimary
-                )
-            },
-            text = {
+            title = "Reset Checklist Hari Ini?",
+            icon = Icons.Outlined.RestartAlt,
+            content = {
                 Text(
                     text = "Seluruh centang rutinitas pagi dan malam untuk hari ini (${uiState.todayFormattedIndonesian}) akan dikosongkan. Riwayat hari sebelumnya tetap tersimpan aman.",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = glass.textSecondary
                 )
             },
@@ -276,7 +272,7 @@ fun TodayScreen(
                     onClick = { showResetConfirmDialog = false },
                     modifier = Modifier.testTag("cancel_reset_today_button")
                 ) {
-                    Text("Batal", color = glass.textSecondary)
+                    Text("Batal", color = glass.textSecondary, fontWeight = FontWeight.SemiBold)
                 }
             }
         )
@@ -296,6 +292,12 @@ private fun TodayHeaderSection(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
+            LiquidGlassPill(
+                text = "RESEP DOKTER KULIT • AKTIF",
+                containerColor = glass.accentSoftGlow,
+                contentColor = glass.accentPrimaryBlue
+            )
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = "SkinCare Daily",
                 style = MaterialTheme.typography.headlineLarge,
@@ -313,36 +315,18 @@ private fun TodayHeaderSection(
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            IconButton(
+            LiquidCircleIconButton(
+                icon = Icons.Outlined.NotificationsActive,
+                contentDescription = "Pengaturan Pengingat",
                 onClick = onOpenReminders,
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(glass.glassSurfaceElevated)
-                    .border(1.dp, glass.glassBorderStrong, CircleShape)
-                    .testTag("header_reminders_shortcut_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.NotificationsActive,
-                    contentDescription = "Pengaturan Pengingat",
-                    tint = glass.accentPrimaryBlue
-                )
-            }
-            IconButton(
+                modifier = Modifier.testTag("header_reminders_shortcut_button")
+            )
+            LiquidCircleIconButton(
+                icon = Icons.Outlined.RestartAlt,
+                contentDescription = "Reset Checklist Hari Ini",
                 onClick = onRequestReset,
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(glass.glassSurfaceElevated)
-                    .border(1.dp, glass.glassBorderStrong, CircleShape)
-                    .testTag("reset_today_checklist_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.RestartAlt,
-                    contentDescription = "Reset Checklist Hari Ini",
-                    tint = glass.accentPrimaryBlue
-                )
-            }
+                modifier = Modifier.testTag("reset_today_checklist_button")
+            )
         }
     }
 }

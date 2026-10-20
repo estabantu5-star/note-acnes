@@ -1,9 +1,16 @@
 package com.example.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -33,20 +40,17 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.MedicalServices
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.OpenInFull
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Spa
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.WbSunny
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -90,14 +94,17 @@ import com.example.domain.RoutineScheduleHelper
 import com.example.ui.StepTimerState
 import com.example.ui.TaskItemUiModel
 import com.example.ui.theme.LiquidGlassTokens
+import kotlin.math.cos
+import kotlin.math.sin
 
 // ============================================================================
-// 1. LIQUID GLASS DESIGN PRIMITIVES (ANDROID COMPOSE NATIVE)
+// 1. iOS 26/27 LIQUID GLASS DESIGN PRIMITIVES (ANDROID COMPOSE NATIVE)
 // ============================================================================
 
 /**
- * Full-screen ambient background with soft ice-blue/navy gradient and
- * subtle translucent light refraction orbs.
+ * Full-screen iOS 26/27 spatial ambient background with pale blue (#EAF5FF) to
+ * soft ice blue (#DDF3FF) gradient, electric cyan (#08C5E8) & electric blue (#078BFA)
+ * luminous light orbs, and a diagonal optical glass sheen.
  */
 @Composable
 fun LiquidGlassBackground(
@@ -121,41 +128,60 @@ fun LiquidGlassBackground(
         Canvas(modifier = Modifier.fillMaxSize()) {
             val w = size.width
             val h = size.height
+
+            // Top-right Electric Cyan (#08C5E8) refraction orb
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
                         glass.ambientOrbCyan,
                         Color.Transparent
                     ),
-                    center = Offset(w * 0.85f, h * 0.12f),
-                    radius = w * 0.65f
+                    center = Offset(w * 0.88f, h * 0.10f),
+                    radius = w * 0.72f
                 ),
-                center = Offset(w * 0.85f, h * 0.12f),
-                radius = w * 0.65f
+                center = Offset(w * 0.88f, h * 0.10f),
+                radius = w * 0.72f
             )
+
+            // Mid-left Primary Electric Blue (#078BFA) refraction orb
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
                         glass.ambientOrbBlue,
                         Color.Transparent
                     ),
-                    center = Offset(w * 0.15f, h * 0.48f),
-                    radius = w * 0.7f
+                    center = Offset(w * 0.12f, h * 0.45f),
+                    radius = w * 0.76f
                 ),
-                center = Offset(w * 0.15f, h * 0.48f),
-                radius = w * 0.7f
+                center = Offset(w * 0.12f, h * 0.45f),
+                radius = w * 0.76f
             )
+
+            // Bottom-right soft crystalline cyan bloom
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
                         glass.ambientOrbCyan.copy(alpha = glass.ambientOrbCyan.alpha * 0.75f),
                         Color.Transparent
                     ),
-                    center = Offset(w * 0.8f, h * 0.88f),
-                    radius = w * 0.55f
+                    center = Offset(w * 0.82f, h * 0.88f),
+                    radius = w * 0.62f
                 ),
-                center = Offset(w * 0.8f, h * 0.88f),
-                radius = w * 0.55f
+                center = Offset(w * 0.82f, h * 0.88f),
+                radius = w * 0.62f
+            )
+
+            // Subtle diagonal top-left optical glass reflection wash
+            drawRect(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        glass.glassHighlightTop.copy(alpha = if (glass.isDark) 0.05f else 0.35f),
+                        Color.Transparent,
+                        glass.accentElectricCyan.copy(alpha = if (glass.isDark) 0.03f else 0.06f)
+                    ),
+                    start = Offset(0f, 0f),
+                    end = Offset(w, h * 0.65f)
+                )
             )
         }
         content()
@@ -163,13 +189,16 @@ fun LiquidGlassBackground(
 }
 
 /**
- * Translucent Frosted Liquid Glass Card with top-left specular highlight border,
- * soft elevation shadow, and inner top refraction sheen.
+ * Adaptive iOS 26/27 Frosted Liquid Glass Card with:
+ * - Tinted ambient & spot elevation shadow
+ * - Multi-stop translucent frosted fill
+ * - Top-edge specular light reflection bar
+ * - Diagonal refractive glass border
  */
 @Composable
 fun LiquidGlassSurface(
     modifier: Modifier = Modifier,
-    cornerRadius: Dp = 24.dp,
+    cornerRadius: Dp = LiquidGlassTokens.radii.cardMedium,
     isElevated: Boolean = false,
     isHighlighted: Boolean = false,
     tintColor: Color? = null,
@@ -186,9 +215,9 @@ fun LiquidGlassSurface(
     val borderBrush = if (isHighlighted) {
         Brush.linearGradient(
             colors = listOf(
-                glass.accentElectricCyan.copy(alpha = 0.85f),
-                glass.glassBorderStrong,
-                glass.accentPrimaryBlue.copy(alpha = 0.55f)
+                glass.accentElectricCyan.copy(alpha = 0.92f),
+                glass.glassHighlightTop,
+                glass.accentPrimaryBlue.copy(alpha = 0.65f)
             )
         )
     } else {
@@ -196,7 +225,7 @@ fun LiquidGlassSurface(
             colors = listOf(
                 glass.glassHighlightTop,
                 glass.glassBorderSubtle,
-                glass.glassBorderStrong.copy(alpha = 0.45f)
+                glass.glassBorderStrong.copy(alpha = 0.52f)
             )
         )
     }
@@ -204,18 +233,23 @@ fun LiquidGlassSurface(
     Box(
         modifier = modifier
             .shadow(
-                elevation = if (isElevated || isHighlighted) 12.dp else 6.dp,
+                elevation = if (isElevated || isHighlighted) {
+                    LiquidGlassTokens.elevation.cardElevated
+                } else {
+                    LiquidGlassTokens.elevation.cardDefault
+                },
                 shape = shape,
                 ambientColor = glass.accentDeepBlue.copy(alpha = 0.14f),
-                spotColor = glass.accentPrimaryBlue.copy(alpha = 0.18f)
+                spotColor = glass.accentPrimaryBlue.copy(alpha = 0.20f)
             )
             .clip(shape)
             .background(baseSurface)
             .background(
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        glass.glassHighlightTop.copy(alpha = if (glass.isDark) 0.10f else 0.42f),
-                        Color.Transparent
+                        glass.glassHighlightTop.copy(alpha = if (glass.isDark) 0.14f else 0.55f),
+                        Color.Transparent,
+                        glass.accentSoftGlow.copy(alpha = if (glass.isDark) 0.08f else 0.22f)
                     )
                 )
             )
@@ -225,6 +259,25 @@ fun LiquidGlassSurface(
                 shape = shape
             )
     ) {
+        // Subtle top-edge specular refraction line
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .height(1.dp)
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            glass.glassHighlightTop.copy(alpha = if (glass.isDark) 0.55f else 0.90f),
+                            glass.accentElectricCyan.copy(alpha = if (isHighlighted) 0.70f else 0.25f),
+                            Color.Transparent
+                        )
+                    )
+                )
+                .align(Alignment.TopCenter)
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -235,7 +288,157 @@ fun LiquidGlassSurface(
 }
 
 /**
- * Circular Liquid Glass Progress Ring with animated sweep, soft glow halo, and rounded stroke cap.
+ * Floating circular iOS 26/27 Liquid Glass icon button (minimum 48.dp touch target)
+ * with frosted glass fill, specular top highlight, and electric blue/cyan icon tint.
+ */
+@Composable
+fun LiquidCircleIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    tint: Color = LiquidGlassTokens.colors.accentPrimaryBlue,
+    isHighlighted: Boolean = false
+) {
+    val glass = LiquidGlassTokens.colors
+    IconButton(
+        onClick = onClick,
+        modifier = modifier
+            .size(48.dp)
+            .shadow(
+                elevation = 8.dp,
+                shape = CircleShape,
+                ambientColor = glass.accentDeepBlue.copy(alpha = 0.12f),
+                spotColor = glass.accentPrimaryBlue.copy(alpha = 0.18f)
+            )
+            .clip(CircleShape)
+            .background(
+                brush = if (isHighlighted) {
+                    Brush.linearGradient(
+                        listOf(glass.accentPrimaryBlue, glass.accentElectricCyan)
+                    )
+                } else {
+                    Brush.verticalGradient(
+                        listOf(glass.glassHighlightTop.copy(alpha = if (glass.isDark) 0.22f else 0.85f), glass.glassSurfaceElevated)
+                    )
+                }
+            )
+            .border(
+                width = 1.dp,
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        glass.glassHighlightTop,
+                        glass.glassBorderStrong
+                    )
+                ),
+                shape = CircleShape
+            )
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = if (isHighlighted) Color.White else tint,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+/**
+ * Reusable iOS 26/27 Frosted Liquid Glass Modal Dialog replacing generic flat AlertDialogs.
+ */
+@Composable
+fun LiquidGlassModalDialog(
+    onDismissRequest: () -> Unit,
+    title: String,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    content: @Composable ColumnScope.() -> Unit,
+    confirmButton: @Composable () -> Unit,
+    dismissButton: (@Composable () -> Unit)? = null
+) {
+    val glass = LiquidGlassTokens.colors
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.42f))
+                .padding(horizontal = 18.dp, vertical = 24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            LiquidGlassSurface(
+                modifier = modifier.fillMaxWidth(),
+                cornerRadius = 30.dp,
+                isElevated = true,
+                isHighlighted = true,
+                contentPadding = PaddingValues(20.dp)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        if (icon != null) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(
+                                        Brush.linearGradient(
+                                            listOf(glass.accentPrimaryBlue, glass.accentElectricCyan)
+                                        )
+                                    )
+                                    .border(1.dp, Color.White.copy(alpha = 0.55f), RoundedCornerShape(14.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = glass.textPrimary,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        content = content
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (dismissButton != null) {
+                            dismissButton()
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        confirmButton()
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Circular iOS 26/27 Liquid Glass Progress Ring with frosted inner optical plate,
+ * subtle radial dial ticks, outer cyan/blue glow halo, and animated gradient sweep.
  */
 @Composable
 fun LiquidProgressRing(
@@ -249,7 +452,10 @@ fun LiquidProgressRing(
     val clamped = percentage.coerceIn(0, 100)
     val animatedProgress by animateFloatAsState(
         targetValue = clamped / 100f,
-        animationSpec = tween(durationMillis = 650, easing = FastOutSlowInEasing),
+        animationSpec = tween(
+            durationMillis = LiquidGlassTokens.animation.progressRingSweepMs,
+            easing = FastOutSlowInEasing
+        ),
         label = "liquidRingProgress"
     )
 
@@ -262,12 +468,41 @@ fun LiquidProgressRing(
             val inset = strokePx / 2f + 4.dp.toPx()
             val arcSize = Size(this.size.width - inset * 2, this.size.height - inset * 2)
             val topLeft = Offset(inset, inset)
+            val centerPt = Offset(this.size.width / 2f, this.size.height / 2f)
+            val innerPlateRadius = (this.size.minDimension / 2f) - strokePx - 2.dp.toPx()
 
-            // Frosted inner circle plate
+            // Frosted inner optical circle plate
             drawCircle(
-                color = glass.glassSurfaceSecondary,
-                radius = (this.size.minDimension / 2f) - strokePx - 2.dp.toPx()
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        glass.glassSurfaceElevated,
+                        glass.glassSurfaceSecondary
+                    ),
+                    center = centerPt,
+                    radius = innerPlateRadius.coerceAtLeast(1f)
+                ),
+                radius = innerPlateRadius.coerceAtLeast(1f)
             )
+
+            // Subtle dial tick markers inside the ring
+            val tickRadiusOuter = innerPlateRadius - 3.dp.toPx()
+            val tickRadiusInner = innerPlateRadius - 6.dp.toPx()
+            if (tickRadiusInner > 4f) {
+                for (i in 0 until 12) {
+                    val angleRad = Math.toRadians((i * 30 - 90).toDouble())
+                    val startX = centerPt.x + (tickRadiusInner * cos(angleRad)).toFloat()
+                    val startY = centerPt.y + (tickRadiusInner * sin(angleRad)).toFloat()
+                    val endX = centerPt.x + (tickRadiusOuter * cos(angleRad)).toFloat()
+                    val endY = centerPt.y + (tickRadiusOuter * sin(angleRad)).toFloat()
+                    drawLine(
+                        color = glass.accentPrimaryBlue.copy(alpha = 0.22f),
+                        start = Offset(startX, startY),
+                        end = Offset(endX, endY),
+                        strokeWidth = 1.5.dp.toPx(),
+                        cap = StrokeCap.Round
+                    )
+                }
+            }
 
             // Track ring
             drawArc(
@@ -280,13 +515,13 @@ fun LiquidProgressRing(
                 style = Stroke(width = strokePx, cap = StrokeCap.Round)
             )
 
-            // Soft outer glow arc
+            // Soft outer glow arc + main active gradient arc
             if (animatedProgress > 0.01f) {
                 drawArc(
                     brush = Brush.sweepGradient(
                         colors = listOf(
                             glass.accentPrimaryBlue.copy(alpha = 0.35f),
-                            glass.accentElectricCyan.copy(alpha = 0.45f),
+                            glass.accentElectricCyan.copy(alpha = 0.50f),
                             glass.accentPrimaryBlue.copy(alpha = 0.35f)
                         )
                     ),
@@ -298,7 +533,6 @@ fun LiquidProgressRing(
                     style = Stroke(width = strokePx + 5.dp.toPx(), cap = StrokeCap.Round)
                 )
 
-                // Main active gradient arc
                 drawArc(
                     brush = Brush.linearGradient(
                         colors = listOf(
@@ -327,6 +561,7 @@ fun LiquidProgressRing(
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
                     color = glass.textSecondary
                 )
             }
@@ -335,7 +570,8 @@ fun LiquidProgressRing(
 }
 
 /**
- * Segmented Pill Control with frosted glass capsule and glowing cyan/blue active pill.
+ * iOS 26/27 Liquid Segmented Control with frosted glass capsule and glowing
+ * electric blue/cyan active pill with specular border.
  */
 @Composable
 fun LiquidSegmentedBar(
@@ -349,14 +585,31 @@ fun LiquidSegmentedBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .shadow(
+                elevation = 6.dp,
+                shape = CircleShape,
+                ambientColor = glass.accentDeepBlue.copy(alpha = 0.10f),
+                spotColor = glass.accentPrimaryBlue.copy(alpha = 0.14f)
+            )
             .clip(CircleShape)
             .background(glass.glassSurfaceSecondary)
-            .border(1.dp, glass.glassBorderStrong, CircleShape)
+            .border(
+                width = 1.dp,
+                brush = Brush.linearGradient(
+                    listOf(glass.glassHighlightTop, glass.glassBorderStrong)
+                ),
+                shape = CircleShape
+            )
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         options.forEachIndexed { index, label ->
             val selected = index == selectedIndex
+            val animatedTextColor by animateColorAsState(
+                targetValue = if (selected) Color.White else glass.textSecondary,
+                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                label = "segTextColor"
+            )
             val tagMod = if (optionTestTags != null && index in optionTestTags.indices) {
                 Modifier.testTag(optionTestTags[index])
             } else {
@@ -381,6 +634,17 @@ fun LiquidSegmentedBar(
                             )
                         }
                     )
+                    .then(
+                        if (selected) {
+                            Modifier.border(
+                                width = 1.dp,
+                                color = Color.White.copy(alpha = 0.55f),
+                                shape = CircleShape
+                            )
+                        } else {
+                            Modifier
+                        }
+                    )
                     .clickable { onSelect(index) }
                     .padding(vertical = 10.dp, horizontal = 8.dp),
                 contentAlignment = Alignment.Center
@@ -389,7 +653,7 @@ fun LiquidSegmentedBar(
                     text = label,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                    color = if (selected) Color.White else glass.textSecondary,
+                    color = animatedTextColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -436,7 +700,7 @@ fun LiquidGlassPill(
 }
 
 /**
- * Primary glowing gradient action pill button.
+ * Primary glowing gradient action pill button (#078BFA -> #08C5E8) with top specular border.
  */
 @Composable
 fun LiquidPrimaryActionButton(
@@ -452,10 +716,10 @@ fun LiquidPrimaryActionButton(
         modifier = modifier
             .height(48.dp)
             .shadow(
-                elevation = if (enabled) 8.dp else 0.dp,
+                elevation = if (enabled) 10.dp else 0.dp,
                 shape = shape,
-                ambientColor = glass.accentPrimaryBlue.copy(alpha = 0.25f),
-                spotColor = glass.accentElectricCyan.copy(alpha = 0.35f)
+                ambientColor = glass.accentPrimaryBlue.copy(alpha = 0.28f),
+                spotColor = glass.accentElectricCyan.copy(alpha = 0.38f)
             )
             .clip(shape)
             .background(
@@ -475,7 +739,7 @@ fun LiquidPrimaryActionButton(
                     )
                 }
             )
-            .border(1.dp, Color.White.copy(alpha = 0.45f), shape)
+            .border(1.dp, Color.White.copy(alpha = 0.55f), shape)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 18.dp),
         contentAlignment = Alignment.Center
@@ -506,7 +770,7 @@ fun LiquidPrimaryActionButton(
 }
 
 /**
- * Secondary translucent glass pill button.
+ * Secondary translucent glass pill button with refractive border.
  */
 @Composable
 fun LiquidSecondaryGlassButton(
@@ -521,9 +785,28 @@ fun LiquidSecondaryGlassButton(
     Box(
         modifier = modifier
             .height(48.dp)
+            .shadow(
+                elevation = 4.dp,
+                shape = shape,
+                ambientColor = glass.accentDeepBlue.copy(alpha = 0.08f),
+                spotColor = glass.accentPrimaryBlue.copy(alpha = 0.12f)
+            )
             .clip(shape)
-            .background(glass.glassSurfaceElevated)
-            .border(1.dp, glass.glassBorderStrong, shape)
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        glass.glassHighlightTop.copy(alpha = if (glass.isDark) 0.16f else 0.75f),
+                        glass.glassSurfaceElevated
+                    )
+                )
+            )
+            .border(
+                width = 1.dp,
+                brush = Brush.linearGradient(
+                    listOf(glass.glassHighlightTop, glass.glassBorderStrong)
+                ),
+                shape = shape
+            )
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center
@@ -554,7 +837,7 @@ fun LiquidSecondaryGlassButton(
 }
 
 /**
- * Translucent product bottle / tube visual icon badge for routine step cards & detail header.
+ * 3D-inspired translucent product bottle / tube squircle badge with inner specular arc.
  */
 @Composable
 fun ProductBottleGlyph(
@@ -577,11 +860,18 @@ fun ProductBottleGlyph(
         cat == ProductCategory.SUNSCREEN -> glass.accentElectricCyan
         else -> glass.accentPrimaryBlue
     }
+    val squircleShape = RoundedCornerShape(size * 0.32f)
 
     Box(
         modifier = modifier
             .size(size)
-            .clip(RoundedCornerShape(14.dp))
+            .shadow(
+                elevation = if (isActiveHighlight) 8.dp else 4.dp,
+                shape = squircleShape,
+                ambientColor = glass.accentPrimaryBlue.copy(alpha = 0.22f),
+                spotColor = glass.accentElectricCyan.copy(alpha = 0.28f)
+            )
+            .clip(squircleShape)
             .background(
                 brush = if (isActiveHighlight) {
                     Brush.linearGradient(
@@ -598,11 +888,32 @@ fun ProductBottleGlyph(
             )
             .border(
                 width = 1.dp,
-                color = if (isActiveHighlight) Color.White.copy(alpha = 0.6f) else glass.glassBorderStrong,
-                shape = RoundedCornerShape(14.dp)
+                brush = Brush.linearGradient(
+                    colors = if (isActiveHighlight) {
+                        listOf(Color.White.copy(alpha = 0.8f), glass.accentElectricCyan)
+                    } else {
+                        listOf(glass.glassHighlightTop, glass.glassBorderStrong)
+                    }
+                ),
+                shape = squircleShape
             ),
         contentAlignment = Alignment.Center
     ) {
+        // Inner specular glass highlight arc
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = if (isActiveHighlight) 0.28f else 0.45f),
+                        Color.Transparent
+                    ),
+                    center = Offset(this.size.width * 0.28f, this.size.height * 0.22f),
+                    radius = this.size.width * 0.55f
+                ),
+                center = Offset(this.size.width * 0.28f, this.size.height * 0.22f),
+                radius = this.size.width * 0.55f
+            )
+        }
         Icon(
             imageVector = icon,
             contentDescription = null,
@@ -613,7 +924,7 @@ fun ProductBottleGlyph(
 }
 
 // ============================================================================
-// 2. NON-BLOCKING 3-MINUTE STEP INTERVAL TIMER BAR + FULL-SCREEN LIQUID MODAL
+// 2. NON-BLOCKING 3-MINUTE STEP INTERVAL TIMER CAPSULE + FULL-SCREEN MODAL
 // ============================================================================
 
 @Composable
@@ -627,7 +938,12 @@ fun NonBlockingStepTimerBar(
     val isVisible = timerState.isActiveOrPaused
     var showFullScreenModal by rememberSaveable { mutableStateOf(false) }
 
-    AnimatedVisibility(visible = isVisible, modifier = modifier) {
+    AnimatedVisibility(
+        visible = isVisible,
+        enter = fadeIn() + expandVertically(),
+        exit = fadeOut() + shrinkVertically(),
+        modifier = modifier
+    ) {
         val glass = LiquidGlassTokens.colors
         val total = timerState.totalSeconds.coerceAtLeast(1)
         val progress = (total - timerState.remainingSeconds).toFloat() / total.toFloat()
@@ -638,7 +954,7 @@ fun NonBlockingStepTimerBar(
                 .padding(horizontal = 16.dp, vertical = 6.dp)
                 .clickable { showFullScreenModal = true }
                 .testTag("step_timer_bar"),
-            cornerRadius = 22.dp,
+            cornerRadius = 26.dp,
             isElevated = true,
             isHighlighted = true,
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
@@ -654,13 +970,14 @@ fun NonBlockingStepTimerBar(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(38.dp)
+                            .size(40.dp)
                             .clip(CircleShape)
                             .background(
                                 Brush.linearGradient(
                                     listOf(glass.accentPrimaryBlue, glass.accentElectricCyan)
                                 )
-                            ),
+                            )
+                            .border(1.dp, Color.White.copy(alpha = 0.65f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -813,25 +1130,17 @@ private fun LiquidStepTimerModalDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(
+                    LiquidCircleIconButton(
+                        icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                        contentDescription = "Kembali",
                         onClick = onMinimize,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(glass.glassSurfaceElevated)
-                            .border(1.dp, glass.glassBorderStrong, CircleShape)
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                            contentDescription = "Kembali",
-                            tint = glass.textPrimary
-                        )
-                    }
+                        tint = glass.textPrimary
+                    )
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = "Timer Jeda Langkah",
                             style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.ExtraBold,
                             color = glass.textPrimary
                         )
                         Text(
@@ -840,28 +1149,21 @@ private fun LiquidStepTimerModalDialog(
                             color = glass.textSecondary
                         )
                     }
-                    IconButton(
+                    LiquidCircleIconButton(
+                        icon = Icons.Outlined.Close,
+                        contentDescription = "Batalkan Timer",
                         onClick = onResetAndDismiss,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(glass.glassSurfaceElevated)
-                            .border(1.dp, glass.glassBorderStrong, CircleShape)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Close,
-                            contentDescription = "Batalkan Timer",
-                            tint = glass.textPrimary
-                        )
-                    }
+                        tint = glass.textPrimary
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Current Step Pill Context Card
                 LiquidGlassSurface(
-                    cornerRadius = 22.dp,
+                    cornerRadius = 24.dp,
                     isElevated = true,
+                    isHighlighted = true,
                     contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp)
                 ) {
                     Row(
@@ -871,12 +1173,13 @@ private fun LiquidStepTimerModalDialog(
                         ProductBottleGlyph(
                             productCategory = ProductCategory.SUPPORTIVE_SKINCARE.id,
                             isActiveHighlight = true,
-                            size = 44.dp
+                            size = 46.dp
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "SEDANG MERESAP",
+                                text = "SEDANG MERESAP • JEDA RESEP",
                                 style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
                                 color = glass.accentPrimaryBlue
                             )
                             Text(
@@ -893,7 +1196,7 @@ private fun LiquidStepTimerModalDialog(
 
                 // Central Circular Liquid Countdown Ring
                 Box(
-                    modifier = Modifier.size(250.dp),
+                    modifier = Modifier.size(256.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Canvas(modifier = Modifier.fillMaxSize()) {
@@ -921,7 +1224,7 @@ private fun LiquidStepTimerModalDialog(
                             brush = Brush.sweepGradient(
                                 colors = listOf(
                                     glass.accentPrimaryBlue.copy(alpha = 0.35f),
-                                    glass.accentElectricCyan.copy(alpha = 0.50f),
+                                    glass.accentElectricCyan.copy(alpha = 0.55f),
                                     glass.accentPrimaryBlue.copy(alpha = 0.35f)
                                 )
                             ),
@@ -1002,7 +1305,7 @@ private fun LiquidStepTimerModalDialog(
 }
 
 // ============================================================================
-// 3. STEP DETAIL SHEET / DIALOG (IMAGE 2 SCREEN 2: DETAIL LANGKAH)
+// 3. STEP DETAIL SHEET / DIALOG (DETAIL LANGKAH — LIQUID GLASS MODAL)
 // ============================================================================
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -1029,7 +1332,7 @@ fun TaskDetailDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.38f))
+                .background(Color.Black.copy(alpha = 0.42f))
                 .padding(horizontal = 16.dp, vertical = 24.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -1147,7 +1450,7 @@ fun TaskDetailDialog(
                         }
                     }
 
-                    // Segmented Tabs: Instruksi Resep | Jadwal & Takaran | Keamanan
+                    // Segmented Tabs: Instruksi Resep | Jadwal & Area | Catatan Medis
                     LiquidSegmentedBar(
                         options = listOf("Instruksi Resep", "Jadwal & Area", "Catatan Medis"),
                         selectedIndex = selectedTabIndex,
@@ -1362,7 +1665,7 @@ private fun DetailMetaRow(
 }
 
 // ============================================================================
-// 4. TIME PICKER MODAL DIALOG & FIRST-RUN ONBOARDING DIALOG
+// 4. TIME PICKER MODAL DIALOG & FIRST-RUN ONBOARDING DIALOG (LIQUID GLASS)
 // ============================================================================
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1381,27 +1684,11 @@ fun TimePickerModalDialog(
         is24Hour = true
     )
 
-    AlertDialog(
+    LiquidGlassModalDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(28.dp),
-        containerColor = glass.glassSurfaceElevated,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Outlined.AccessTime,
-                    contentDescription = null,
-                    tint = glass.accentPrimaryBlue
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = glass.textPrimary
-                )
-            }
-        },
-        text = {
+        title = title,
+        icon = Icons.Outlined.AccessTime,
+        content = {
             Box(
                 modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center
@@ -1421,7 +1708,7 @@ fun TimePickerModalDialog(
                 onClick = onDismiss,
                 modifier = Modifier.testTag("time_picker_cancel_button")
             ) {
-                Text("Batal", color = glass.textSecondary)
+                Text("Batal", color = glass.textSecondary, fontWeight = FontWeight.SemiBold)
             }
         }
     )
@@ -1436,82 +1723,63 @@ fun FirstRunNotificationSetupDialog(
     var morningChecked by rememberSaveable { mutableStateOf(true) }
     var eveningChecked by rememberSaveable { mutableStateOf(true) }
 
-    AlertDialog(
+    LiquidGlassModalDialog(
         onDismissRequest = onDismissLater,
-        shape = RoundedCornerShape(28.dp),
-        containerColor = glass.glassSurfaceElevated,
-        icon = {
-            Box(
-                modifier = Modifier
-                    .size(52.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.linearGradient(
-                            listOf(glass.accentPrimaryBlue, glass.accentElectricCyan)
-                        )
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.NotificationsActive,
-                    contentDescription = null,
-                    tint = Color.White
-                )
-            }
-        },
-        title = {
+        title = "Aktifkan Pengingat Rutinitas?",
+        icon = Icons.Outlined.NotificationsActive,
+        content = {
             Text(
-                text = "Aktifkan Pengingat Rutinitas?",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = glass.textPrimary
+                text = "SkinCare Daily membantu mengingatkan jadwal rutinitas pagi & malam sesuai resep dokter kulit Anda.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = glass.textSecondary
             )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    text = "SkinCare Daily membantu mengingatkan jadwal rutinitas pagi & malam sesuai resep dokter kulit Anda.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = glass.textSecondary
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Checkbox(
-                        checked = morningChecked,
-                        onCheckedChange = { morningChecked = it },
-                        colors = CheckboxDefaults.colors(checkedColor = glass.accentPrimaryBlue),
-                        modifier = Modifier.testTag("onboarding_morning_checkbox")
-                    )
-                    Text(
-                        text = "Pengingat Rutinitas Pagi (07:00)",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = glass.textPrimary
-                    )
+            Surface(
+                color = glass.glassSurfaceSecondary,
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, glass.glassBorderSubtle)
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Checkbox(
+                            checked = morningChecked,
+                            onCheckedChange = { morningChecked = it },
+                            colors = CheckboxDefaults.colors(checkedColor = glass.accentPrimaryBlue),
+                            modifier = Modifier.testTag("onboarding_morning_checkbox")
+                        )
+                        Text(
+                            text = "Pengingat Rutinitas Pagi (07:00)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = glass.textPrimary
+                        )
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Checkbox(
+                            checked = eveningChecked,
+                            onCheckedChange = { eveningChecked = it },
+                            colors = CheckboxDefaults.colors(checkedColor = glass.accentPrimaryBlue),
+                            modifier = Modifier.testTag("onboarding_evening_checkbox")
+                        )
+                        Text(
+                            text = "Pengingat Rutinitas Malam (21:00)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = glass.textPrimary
+                        )
+                    }
                 }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Checkbox(
-                        checked = eveningChecked,
-                        onCheckedChange = { eveningChecked = it },
-                        colors = CheckboxDefaults.colors(checkedColor = glass.accentPrimaryBlue),
-                        modifier = Modifier.testTag("onboarding_evening_checkbox")
-                    )
-                    Text(
-                        text = "Pengingat Rutinitas Malam (20:00)",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = glass.textPrimary
-                    )
-                }
-                Text(
-                    text = "Waktu pengingat dapat diubah kapan saja di tab Pengingat.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = glass.textSecondary
-                )
             }
+            Text(
+                text = "Waktu pengingat dapat diubah kapan saja di tab Pengingat.",
+                style = MaterialTheme.typography.bodySmall,
+                color = glass.textSecondary
+            )
         },
         confirmButton = {
             LiquidPrimaryActionButton(
@@ -1527,7 +1795,7 @@ fun FirstRunNotificationSetupDialog(
                 onClick = onDismissLater,
                 modifier = Modifier.testTag("onboarding_later_button")
             ) {
-                Text("Nanti Saja", color = glass.textSecondary)
+                Text("Nanti Saja", color = glass.textSecondary, fontWeight = FontWeight.SemiBold)
             }
         }
     )

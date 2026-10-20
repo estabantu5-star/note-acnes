@@ -112,9 +112,12 @@ fun HistoryScreen(
             )
         }
 
-        // Weekly Summary 2x2 Frosted Glass Grid
+        // Weekly Summary 2x2 Frosted Glass Grid + 7-Day Adherence Bar Strip
         item(key = "weekly_summary_card") {
-            WeeklyAdherenceSummaryCard(summary = uiState.weeklySummary)
+            WeeklyAdherenceSummaryCard(
+                summary = uiState.weeklySummary,
+                recentRecords = uiState.historyRecords.take(7)
+            )
         }
 
         if (filteredRecords.isEmpty()) {
@@ -168,7 +171,10 @@ fun HistoryScreen(
 }
 
 @Composable
-private fun WeeklyAdherenceSummaryCard(summary: WeeklyHistorySummaryUi) {
+private fun WeeklyAdherenceSummaryCard(
+    summary: WeeklyHistorySummaryUi,
+    recentRecords: List<HistoryDayRecordUi>
+) {
     val glass = LiquidGlassTokens.colors
     LiquidGlassSurface(
         modifier = Modifier
@@ -232,6 +238,72 @@ private fun WeeklyAdherenceSummaryCard(summary: WeeklyHistorySummaryUi) {
                     value = "${summary.fullEveningDaysCount} hari",
                     modifier = Modifier.weight(1f)
                 )
+            }
+
+            if (recentRecords.isNotEmpty()) {
+                Surface(
+                    color = glass.glassSurfaceSecondary,
+                    shape = RoundedCornerShape(18.dp),
+                    border = BorderStroke(1.dp, glass.glassBorderSubtle)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Grafik Kepatuhan Harian",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = glass.textSecondary
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(64.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.Bottom
+                        ) {
+                            recentRecords.reversed().forEach { rec ->
+                                val pct = rec.completionPercentage.coerceIn(0, 100)
+                                val barFraction = (pct / 100f).coerceIn(0.12f, 1f)
+                                val shortLabel = rec.dateIso.takeLast(5)
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Bottom,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(14.dp)
+                                            .height((40.dp * barFraction).coerceAtLeast(6.dp))
+                                            .clip(CircleShape)
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    colors = if (pct >= 100) {
+                                                        listOf(glass.accentElectricCyan, glass.accentPrimaryBlue)
+                                                    } else {
+                                                        listOf(
+                                                            glass.accentPrimaryBlue.copy(alpha = 0.75f),
+                                                            glass.accentElectricCyan.copy(alpha = 0.55f)
+                                                        )
+                                                    }
+                                                )
+                                            )
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = shortLabel,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = glass.textSecondary,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }

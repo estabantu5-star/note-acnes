@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -421,7 +422,8 @@ fun SkinCareDailyAppRoot(
 }
 
 /**
- * Floating Frosted Glass Pill Bottom Navigation Bar with glowing active pill capsule.
+ * iOS 26/27 Floating Frosted Glass Pill Bottom Navigation Bar with top specular highlight
+ * and glowing electric blue/cyan active pill capsule.
  */
 @Composable
 private fun SkinCareBottomNavigationBar(
@@ -429,7 +431,7 @@ private fun SkinCareBottomNavigationBar(
     onSelectTab: (MainNavTab) -> Unit
 ) {
     val glass = LiquidGlassTokens.colors
-    val pillShape = RoundedCornerShape(30.dp)
+    val pillShape = RoundedCornerShape(32.dp)
 
     Box(
         modifier = Modifier
@@ -439,81 +441,124 @@ private fun SkinCareBottomNavigationBar(
             .testTag("bottom_navigation_bar"),
         contentAlignment = Alignment.Center
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .widthIn(max = 520.dp)
                 .shadow(
-                    elevation = 16.dp,
+                    elevation = 18.dp,
                     shape = pillShape,
-                    ambientColor = glass.accentDeepBlue.copy(alpha = 0.18f),
-                    spotColor = glass.accentPrimaryBlue.copy(alpha = 0.24f)
+                    ambientColor = glass.accentDeepBlue.copy(alpha = 0.20f),
+                    spotColor = glass.accentPrimaryBlue.copy(alpha = 0.28f)
                 )
                 .clip(pillShape)
                 .background(glass.glassSurfaceElevated)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            glass.glassHighlightTop.copy(alpha = if (glass.isDark) 0.18f else 0.65f),
+                            Color.Transparent
+                        )
+                    )
+                )
                 .border(
                     width = 1.dp,
                     brush = Brush.linearGradient(
                         colors = listOf(
                             glass.glassHighlightTop,
                             glass.glassBorderStrong,
-                            glass.accentElectricCyan.copy(alpha = 0.45f)
+                            glass.accentElectricCyan.copy(alpha = 0.50f)
                         )
                     ),
                     shape = pillShape
                 )
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
         ) {
-            MainNavTab.entries.forEach { tab ->
-                val selected = selectedTab == tab
-                val icon = when (tab) {
-                    MainNavTab.TODAY -> if (selected) Icons.Filled.CalendarToday else Icons.Outlined.CalendarToday
-                    MainNavTab.REMINDERS -> if (selected) Icons.Filled.Notifications else Icons.Outlined.Notifications
-                    MainNavTab.HISTORY -> if (selected) Icons.Filled.History else Icons.Outlined.History
-                    MainNavTab.SETTINGS -> if (selected) Icons.Filled.Settings else Icons.Outlined.Settings
-                }
+            // Top-edge specular refraction line
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 28.dp)
+                    .height(1.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                glass.glassHighlightTop,
+                                glass.accentElectricCyan.copy(alpha = 0.55f),
+                                Color.Transparent
+                            )
+                        )
+                    )
+                    .align(Alignment.TopCenter)
+            )
 
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(CircleShape)
-                        .background(
-                            brush = if (selected) {
-                                Brush.horizontalGradient(
-                                    colors = listOf(
-                                        glass.accentPrimaryBlue,
-                                        glass.accentElectricCyan
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 7.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                MainNavTab.entries.forEach { tab ->
+                    val selected = selectedTab == tab
+                    val icon = when (tab) {
+                        MainNavTab.TODAY -> if (selected) Icons.Filled.CalendarToday else Icons.Outlined.CalendarToday
+                        MainNavTab.REMINDERS -> if (selected) Icons.Filled.Notifications else Icons.Outlined.Notifications
+                        MainNavTab.HISTORY -> if (selected) Icons.Filled.History else Icons.Outlined.History
+                        MainNavTab.SETTINGS -> if (selected) Icons.Filled.Settings else Icons.Outlined.Settings
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(CircleShape)
+                            .background(
+                                brush = if (selected) {
+                                    Brush.horizontalGradient(
+                                        colors = listOf(
+                                            glass.accentPrimaryBlue,
+                                            glass.accentElectricCyan
+                                        )
                                     )
-                                )
-                            } else {
-                                Brush.horizontalGradient(
-                                    colors = listOf(Color.Transparent, Color.Transparent)
-                                )
-                            }
-                        )
-                        .clickable { onSelectTab(tab) }
-                        .padding(vertical = 8.dp, horizontal = 4.dp)
-                        .testTag("nav_tab_${tab.route}"),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                } else {
+                                    Brush.horizontalGradient(
+                                        colors = listOf(Color.Transparent, Color.Transparent)
+                                    )
+                                }
+                            )
+                            .then(
+                                if (selected) {
+                                    Modifier.border(
+                                        width = 1.dp,
+                                        color = Color.White.copy(alpha = 0.55f),
+                                        shape = CircleShape
+                                    )
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            .clickable { onSelectTab(tab) }
+                            .padding(vertical = 8.dp, horizontal = 4.dp)
+                            .testTag("nav_tab_${tab.route}"),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = tab.label,
-                            tint = if (selected) Color.White else glass.textSecondary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Text(
-                            text = tab.label,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (selected) Color.White else glass.textSecondary
-                        )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = tab.label,
+                                tint = if (selected) Color.White else glass.textSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = tab.label,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (selected) Color.White else glass.textSecondary
+                            )
+                        }
                     }
                 }
             }
@@ -529,7 +574,11 @@ private fun SkinCareNavigationRail(
     val glass = LiquidGlassTokens.colors
     NavigationRail(
         containerColor = glass.glassSurfaceElevated,
-        modifier = Modifier.testTag("side_navigation_rail")
+        modifier = Modifier
+            .padding(vertical = 12.dp, horizontal = 8.dp)
+            .clip(RoundedCornerShape(28.dp))
+            .border(1.dp, glass.glassBorderStrong, RoundedCornerShape(28.dp))
+            .testTag("side_navigation_rail")
     ) {
         MainNavTab.entries.forEach { tab ->
             val selected = selectedTab == tab
@@ -545,7 +594,7 @@ private fun SkinCareNavigationRail(
                     }
                     Icon(imageVector = icon, contentDescription = tab.label)
                 },
-                label = { Text(tab.label) },
+                label = { Text(tab.label, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium) },
                 modifier = Modifier.testTag("rail_tab_${tab.route}")
             )
         }

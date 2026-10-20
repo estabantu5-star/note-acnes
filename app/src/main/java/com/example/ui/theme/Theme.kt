@@ -9,10 +9,13 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
+/**
+ * Complete iOS 26/27-inspired Blue Liquid Glass color tokens.
+ */
 @Immutable
 data class LiquidGlassColors(
     val isDark: Boolean,
@@ -43,27 +46,84 @@ data class LiquidGlassColors(
     val dangerSoftBg: Color
 )
 
+/**
+ * Complete design-token system for spacing, corner radii, elevation, blur/refraction,
+ * animation durations, and icon sizing.
+ */
+@Immutable
+data class LiquidGlassSpacingTokens(
+    val xxs: Dp = 2.dp,
+    val xs: Dp = 4.dp,
+    val sm: Dp = 8.dp,
+    val md: Dp = 12.dp,
+    val lg: Dp = 16.dp,
+    val xl: Dp = 20.dp,
+    val xxl: Dp = 24.dp,
+    val screenHorizontal: Dp = 16.dp,
+    val bottomNavSafeClearance: Dp = 116.dp
+)
+
+@Immutable
+data class LiquidGlassRadiusTokens(
+    val pill: Dp = 999.dp,
+    val modal: Dp = 30.dp,
+    val cardHero: Dp = 28.dp,
+    val cardLarge: Dp = 26.dp,
+    val cardMedium: Dp = 24.dp,
+    val cardSmall: Dp = 20.dp,
+    val innerSubCard: Dp = 16.dp,
+    val iconSquircle: Dp = 14.dp
+)
+
+@Immutable
+data class LiquidGlassElevationTokens(
+    val cardDefault: Dp = 8.dp,
+    val cardElevated: Dp = 14.dp,
+    val floatingCapsule: Dp = 18.dp,
+    val modalSheet: Dp = 24.dp,
+    val borderThin: Dp = 1.dp,
+    val borderHighlighted: Dp = 1.5.dp
+)
+
+@Immutable
+data class LiquidGlassAnimationTokens(
+    val fastMs: Int = 180,
+    val mediumMs: Int = 280,
+    val slowMs: Int = 450,
+    val progressRingSweepMs: Int = 650
+)
+
+@Immutable
+data class LiquidGlassIconSizeTokens(
+    val xs: Dp = 14.dp,
+    val sm: Dp = 18.dp,
+    val md: Dp = 20.dp,
+    val lg: Dp = 24.dp,
+    val hero: Dp = 32.dp,
+    val minTouchTarget: Dp = 48.dp
+)
+
 private val LightLiquidGlassColors = LiquidGlassColors(
     isDark = false,
-    bgPrimaryStart = IceBlueBgTop,
-    bgPrimaryMid = IceBlueBgMid,
-    bgPrimaryEnd = IceBlueBgBottom,
-    ambientOrbCyan = Color(0x4450D8FF),
-    ambientOrbBlue = Color(0x383A9BFF),
-    glassSurfacePrimary = Color(0xCCFFFFFF),
-    glassSurfaceElevated = Color(0xEBFFFFFF),
-    glassSurfaceSecondary = Color(0xB8EAF5FF),
+    bgPrimaryStart = IceBlueBgTop,          // #EAF5FF Pale blue background
+    bgPrimaryMid = IceBlueBgMid,            // #DDF3FF Soft ice blue
+    bgPrimaryEnd = IceBlueBgBottom,         // #F3F9FF
+    ambientOrbCyan = Color(0x4508C5E8),     // #08C5E8 Cyan accent orb
+    ambientOrbBlue = Color(0x3B078BFA),     // #078BFA Primary electric blue orb
+    glassSurfacePrimary = Color(0xD6FFFFFF),
+    glassSurfaceElevated = Color(0xF0FFFFFF),
+    glassSurfaceSecondary = Color(0xC4EAF5FF),
     glassHighlightTop = Color(0xFFFFFFFF),
-    glassBorderSubtle = Color(0x99FFFFFF),
-    glassBorderStrong = Color(0xFFAAD6FF),
-    accentPrimaryBlue = Color(0xFF0A84FF),
-    accentElectricCyan = Color(0xFF00C7FF),
-    accentDeepBlue = Color(0xFF0055D4),
-    accentSoftGlow = Color(0xFFDDF1FF),
-    textPrimary = NavyInkDark,
-    textSecondary = NavyInkMuted,
-    textMuted = Color(0xFF7B96B8),
-    progressTrack = Color(0xFFCBE3FC),
+    glassBorderSubtle = Color(0xB3FFFFFF),
+    glassBorderStrong = Color(0xFF9ED0FF),
+    accentPrimaryBlue = Color(0xFF078BFA),  // #078BFA Primary electric blue
+    accentElectricCyan = Color(0xFF08C5E8), // #08C5E8 Cyan accent
+    accentDeepBlue = Color(0xFF0058C4),
+    accentSoftGlow = Color(0xFFDDF3FF),     // #DDF3FF Soft ice blue
+    textPrimary = NavyInkDark,              // #10243A Deep navy
+    textSecondary = NavyInkMuted,           // Muted blue-gray
+    textMuted = Color(0xFF7692B2),
+    progressTrack = Color(0xFFC8E3FC),
     successMint = SuccessMintLight,
     successSoftBg = SuccessContainerLight,
     warningAmber = WarningAmberLight,
@@ -77,22 +137,22 @@ private val DarkLiquidGlassColors = LiquidGlassColors(
     bgPrimaryStart = MidnightNavyBgTop,
     bgPrimaryMid = MidnightNavyBgMid,
     bgPrimaryEnd = MidnightNavyBgBottom,
-    ambientOrbCyan = Color(0x3000D9FF),
-    ambientOrbBlue = Color(0x330077FF),
-    glassSurfacePrimary = Color(0xBF102544),
-    glassSurfaceElevated = Color(0xDF163159),
-    glassSurfaceSecondary = Color(0xB3193866),
-    glassHighlightTop = Color(0x667CCBFF),
-    glassBorderSubtle = Color(0x4555A8FF),
-    glassBorderStrong = Color(0x8862C9FF),
+    ambientOrbCyan = Color(0x3308C5E8),
+    ambientOrbBlue = Color(0x38078BFA),
+    glassSurfacePrimary = Color(0xC4102544),
+    glassSurfaceElevated = Color(0xE6153056),
+    glassSurfaceSecondary = Color(0xB8183662),
+    glassHighlightTop = Color(0x7582D1FF),
+    glassBorderSubtle = Color(0x4D54A8FF),
+    glassBorderStrong = Color(0x945EC8FF),
     accentPrimaryBlue = Color(0xFF339DFF),
-    accentElectricCyan = Color(0xFF33E1FF),
-    accentDeepBlue = Color(0xFF0A78E6),
-    accentSoftGlow = Color(0xFF193E6E),
+    accentElectricCyan = Color(0xFF28D8F8),
+    accentDeepBlue = Color(0xFF078BFA),
+    accentSoftGlow = Color(0xFF173B69),
     textPrimary = IceWhiteText,
     textSecondary = FrostedBlueMutedText,
     textMuted = Color(0xFF6B8CB8),
-    progressTrack = Color(0xFF1E3D6B),
+    progressTrack = Color(0xFF1D3C69),
     successMint = SuccessMintDark,
     successSoftBg = SuccessContainerDark,
     warningAmber = WarningAmberDark,
@@ -102,11 +162,36 @@ private val DarkLiquidGlassColors = LiquidGlassColors(
 )
 
 val LocalLiquidGlassColors = staticCompositionLocalOf { LightLiquidGlassColors }
+val LocalLiquidGlassSpacing = staticCompositionLocalOf { LiquidGlassSpacingTokens() }
+val LocalLiquidGlassRadii = staticCompositionLocalOf { LiquidGlassRadiusTokens() }
+val LocalLiquidGlassElevation = staticCompositionLocalOf { LiquidGlassElevationTokens() }
+val LocalLiquidGlassAnimation = staticCompositionLocalOf { LiquidGlassAnimationTokens() }
+val LocalLiquidGlassIconSize = staticCompositionLocalOf { LiquidGlassIconSizeTokens() }
 
 object LiquidGlassTokens {
     val colors: LiquidGlassColors
         @Composable
         get() = LocalLiquidGlassColors.current
+
+    val spacing: LiquidGlassSpacingTokens
+        @Composable
+        get() = LocalLiquidGlassSpacing.current
+
+    val radii: LiquidGlassRadiusTokens
+        @Composable
+        get() = LocalLiquidGlassRadii.current
+
+    val elevation: LiquidGlassElevationTokens
+        @Composable
+        get() = LocalLiquidGlassElevation.current
+
+    val animation: LiquidGlassAnimationTokens
+        @Composable
+        get() = LocalLiquidGlassAnimation.current
+
+    val iconSize: LiquidGlassIconSizeTokens
+        @Composable
+        get() = LocalLiquidGlassIconSize.current
 }
 
 object LiquidGlassTheme {
@@ -173,8 +258,8 @@ val AppShapes = Shapes(
     extraSmall = RoundedCornerShape(10.dp),
     small = RoundedCornerShape(14.dp),
     medium = RoundedCornerShape(18.dp),
-    large = RoundedCornerShape(22.dp),
-    extraLarge = RoundedCornerShape(28.dp)
+    large = RoundedCornerShape(24.dp),
+    extraLarge = RoundedCornerShape(30.dp)
 )
 
 @Composable

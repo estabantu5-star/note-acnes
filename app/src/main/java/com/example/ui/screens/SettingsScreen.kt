@@ -70,6 +70,7 @@ import com.example.domain.RoutinePeriod
 import com.example.domain.RoutineScheduleHelper
 import com.example.ui.SkinCareUiState
 import com.example.ui.components.AboutAndUpdateGlassCard
+import com.example.ui.components.LiquidGlassModalDialog
 import com.example.ui.components.LiquidGlassSurface
 import com.example.ui.components.LiquidPrimaryActionButton
 import com.example.ui.components.LiquidSecondaryGlassButton
@@ -489,35 +490,26 @@ fun SettingsScreen(
     // Export JSON Preview Dialog
     if (exportedJsonPreview != null) {
         val jsonText = exportedJsonPreview.orEmpty()
-        AlertDialog(
+        LiquidGlassModalDialog(
             onDismissRequest = { exportedJsonPreview = null },
-            shape = RoundedCornerShape(28.dp),
-            containerColor = glass.glassSurfaceElevated,
-            title = {
+            title = "Data Cadangan JSON",
+            icon = Icons.Outlined.FileDownload,
+            content = {
                 Text(
-                    text = "Data Cadangan JSON",
-                    fontWeight = FontWeight.Bold,
-                    color = glass.textPrimary
+                    text = "Salin teks JSON di bawah ini untuk disimpan sebagai cadangan:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = glass.textSecondary
                 )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Salin teks JSON di bawah ini untuk disimpan sebagai cadangan:",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = glass.textSecondary
-                    )
-                    OutlinedTextField(
-                        value = jsonText,
-                        onValueChange = {},
-                        readOnly = true,
-                        maxLines = 10,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("exported_json_textfield")
-                    )
-                }
+                OutlinedTextField(
+                    value = jsonText,
+                    onValueChange = {},
+                    readOnly = true,
+                    maxLines = 10,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("exported_json_textfield")
+                )
             },
             confirmButton = {
                 LiquidPrimaryActionButton(
@@ -533,7 +525,7 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { exportedJsonPreview = null }) {
-                    Text("Tutup", color = glass.textSecondary)
+                    Text("Tutup", color = glass.textSecondary, fontWeight = FontWeight.SemiBold)
                 }
             }
         )
@@ -541,35 +533,26 @@ fun SettingsScreen(
 
     // Import JSON Dialog
     if (showImportDialog) {
-        AlertDialog(
+        LiquidGlassModalDialog(
             onDismissRequest = { showImportDialog = false },
-            shape = RoundedCornerShape(28.dp),
-            containerColor = glass.glassSurfaceElevated,
-            title = {
+            title = "Impor Cadangan JSON",
+            icon = Icons.Outlined.FileUpload,
+            content = {
                 Text(
-                    text = "Impor Cadangan JSON",
-                    fontWeight = FontWeight.Bold,
-                    color = glass.textPrimary
+                    text = "Tempelkan teks JSON cadangan Anda di bawah ini:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = glass.textSecondary
                 )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Tempelkan teks JSON cadangan Anda di bawah ini:",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = glass.textSecondary
-                    )
-                    OutlinedTextField(
-                        value = importJsonInput,
-                        onValueChange = { importJsonInput = it },
-                        placeholder = { Text("{\"version\":2,...}") },
-                        maxLines = 8,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("import_json_textfield")
-                    )
-                }
+                OutlinedTextField(
+                    value = importJsonInput,
+                    onValueChange = { importJsonInput = it },
+                    placeholder = { Text("{\"version\":2,...}") },
+                    maxLines = 8,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("import_json_textfield")
+                )
             },
             confirmButton = {
                 LiquidPrimaryActionButton(
@@ -585,7 +568,7 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showImportDialog = false }) {
-                    Text("Batal", color = glass.textSecondary)
+                    Text("Batal", color = glass.textSecondary, fontWeight = FontWeight.SemiBold)
                 }
             }
         )
@@ -593,18 +576,11 @@ fun SettingsScreen(
 
     // Confirm Reset Default Prescription Dialog
     if (showConfirmResetDefault) {
-        AlertDialog(
+        LiquidGlassModalDialog(
             onDismissRequest = { showConfirmResetDefault = false },
-            shape = RoundedCornerShape(28.dp),
-            containerColor = glass.glassSurfaceElevated,
-            title = {
-                Text(
-                    text = "Kembalikan ke Resep Dokter Awal?",
-                    fontWeight = FontWeight.Bold,
-                    color = glass.textPrimary
-                )
-            },
-            text = {
+            title = "Kembalikan ke Resep Dokter Awal?",
+            icon = Icons.Outlined.RestartAlt,
+            content = {
                 Text(
                     text = "Tindakan ini akan mengembalikan langkah rutinitas sesuai resep dokter (Labore AcnePro, Moisturizer, Bioderma Kerato+, Sunscreen Labore, Pharmalene Gel Sen/Rab/Jum, Serum Labore Sel/Kam/Sab/Min).",
                     style = MaterialTheme.typography.bodyMedium,
@@ -623,7 +599,7 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showConfirmResetDefault = false }) {
-                    Text("Batal", color = glass.textSecondary)
+                    Text("Batal", color = glass.textSecondary, fontWeight = FontWeight.SemiBold)
                 }
             }
         )
